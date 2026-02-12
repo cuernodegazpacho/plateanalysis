@@ -1,5 +1,7 @@
 import os
 
+from image_library import images
+
 
 DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 
@@ -36,48 +38,8 @@ def fname(name, datapath=DATAPATH):
     return os.path.join(datapath, name)
 
 
-images = {
-    '19012': 'S05379_y.fits',
-    '19019': 'S05386_y.fits',
-    '16643': 'S02865_y.fits',
-    '16646': 'S02868_y.fits',
-    '17328': 'S03679_y.fits',
-    '17337': 'S03688_y.fits',
-    '18947': 'S05313_y.fits',
-    '18949': 'S05315_y.fits',
-    '62330': 'DRP0174_x.fits',
-    '62343': 'DRP0187_x.fits',
-    '63438': 'DR01413_y.fits',
-    '63440': 'DR01415_y.fits',
-    '9528':  'GS00987_x.fits',
-    '9553':  'GS01012_x.fits',
-    '9313':  'GS00762_x.fits',
-    '9315':  'GS00764_x.fits',
-    '9316':  'GS00765_x.fits',
-    '9317':  'GS00766_x.fits',
-    '9318':  'GS00767_x.fits',
-    '9319':  'GS00768_x.fits',
-    '9320':  'GS00769_x.fits',
-    '9321':  'GS00770_x.fits',
-    '9322':  'GS00771_x.fits',
-    '9323':  'GS00772_x.fits',
-    '9324':  'GS00773_x.fits',
-    '9325':  'GS00774_x.fits',
-    '9326':  'GS00775_x.fits',
-    '9327':  'GS00776_x.fits',
-    '9328':  'GS00777_x.fits',
-    '9344':  'GS00783_x.fits',
-    '9345':  'GS00784_x.fits',
-    '9346':  'GS00785_x.fits',
-    '9347':  'GS00786_x.fits',
-    '9348':  'GS00787_x.fits',
-    '9349':  'GS00788_x.fits',
-    '9350':  'GS00789_x.fits',
-}
-
-
 # these functions replaced a (much simpler) dict with static parameters,
-# and is used for keeping backwards compatibility throughout the code.
+# and are used for keeping backwards compatibility throughout the code.
 
 def get_table_psf_nomatch(plate1, plate2):
         return 'table_psf_nomatch_' + str(plate1) + '_' + str(plate2) + '.fits'
@@ -111,8 +73,6 @@ parameters = {
         'elongation': 1.5,                         # less than
         'annular_bin': 5,                          # less or equals
         'flag_rim': 0,
-        'nbrighter': 150000,
-        'sampling_step': 10,  
         'min_acceptable_flux': 15000,
         'min_fwhm':  5.,
         'max_fwhm': 10.,
@@ -126,7 +86,6 @@ parameters = {
         'sextractor_flags': 8,
         'model_prediction': 0.5,
         'annular_bin': 1,
-        'sampling_step': 1,
         'min_acceptable_flux': 12000,
         'min_fwhm': 10.,
         'max_fwhm': 17.,
@@ -137,7 +96,6 @@ parameters = {
         'elongation': 1.5,
         'model_prediction': 0.5,
         'annular_bin': 1,
-        'sampling_step': 1,  
         'min_fwhm': 6.,
     },
     '17328,17337': {
@@ -145,7 +103,6 @@ parameters = {
         'elongation': 1.5,
         'model_prediction': 0.5,
         'annular_bin': 1,
-        'sampling_step': 1,
         'min_acceptable_flux': 25000,
         'min_fwhm': 7.5,
         'invert_east':  [False,True],
@@ -156,15 +113,13 @@ parameters = {
         'model_prediction': 0.5,
         'elongation': 1.5,
         'annular_bin': 1,
-        'sampling_step': 1,
-        'min_acceptable_flux': 20000,
-        'min_fwhm': 9.,
+        'min_acceptable_flux': 15000,
+        'min_fwhm': 8.,
     },    
     # Doppel-Reflektor
     '62330,62343': {
         'annular_bin': 8,
         'max_flux_threshold': 0.3,
-        'sampling_step': 1,
         'min_acceptable_flux': 20000,
         'min_fwhm': 7.5,
         'max_fwhm': 13.,
@@ -172,7 +127,6 @@ parameters = {
     '63438,63440': {
         'annular_bin': 8,
         'max_flux_threshold': 0.3,
-        'sampling_step': 1,
         'min_acceptable_flux': 25000,
         'min_fwhm': 6.,
         'max_fwhm': 9.,
@@ -180,40 +134,34 @@ parameters = {
     # Grosser Schmidt-Spiegel
     '9528,9553': {
         'annular_bin': 8,
-        'sampling_step': 50,
         'min_acceptable_flux': 25000,
         'max_fwhm': 7.5,
     },
     # candidate
     '9319,9320': {
-        'annular_bin': 4,
+        'annular_bin': 7,
         'min_acceptable_flux': 25000,
         'max_fwhm': 7.5,
     },
     '9318,9319': {              
         'annular_bin': 4,
-        'sampling_step': 5,
         'min_acceptable_flux': 25000,
         'max_fwhm': 15.,
     },
     '9317,9318': {              
         'annular_bin': 4,
-        'sampling_step': 5,
         'min_acceptable_flux': 25000,
         'max_fwhm': 15.,
     },
     '9316,9317': {              
         'annular_bin': 4,
-        'sampling_step': 5,
         'max_fwhm': 15.,
     },
     '9315,9316': {              
         'annular_bin': 4,
-        'sampling_step': 5,
         'min_acceptable_flux': 23000,
     },
     '9313,9315': {              
-        'sampling_step': 5,
         'min_acceptable_flux': 20000,
     },
     '9321,9322': {              
@@ -221,7 +169,6 @@ parameters = {
         'max_fwhm': 15.,
     },
     '9322,9323': {              
-        'sampling_step': 5,
         'min_acceptable_flux': 20000,
         'max_fwhm': 15.,
     },
@@ -229,7 +176,6 @@ parameters = {
         'min_acceptable_flux': 25000,
     },
     '9324,9325': {              
-        'sampling_step': 5,
     },
     # possible candidate
     '9325,9326': {              
@@ -243,14 +189,11 @@ parameters = {
         'min_acceptable_flux': 25000,
     },
     '9344,9345': {
-        'sampling_step': 4,
     },
     '9345,9346': {
-        'sampling_step': 2,
         'max_fwhm': 15.,
     },
     '9346,9347': {                # maybe a candidate?
-        'sampling_step': 3,
         'min_fwhm': 6.5,
         'max_fwhm': 15.,
     },
@@ -259,7 +202,6 @@ parameters = {
         'annular_bin': 7,
         'max_flux_threshold': 0.2,
         'elongation': 1.7, 
-        'sampling_step': 4,
         'max_fwhm': 15.,
     },
     '9348,9349': {
@@ -267,7 +209,6 @@ parameters = {
         'annular_bin': 7,
         'max_flux_threshold': 0.2,
         'elongation': 1.7, 
-        'sampling_step': 8,
         'min_fwhm':  7.,
         'max_fwhm': 15.,
     },
@@ -276,7 +217,6 @@ parameters = {
         'annular_bin': 7,
         'max_flux_threshold': 0.2,
         'elongation': 1.7, 
-        'sampling_step': 8,
         'min_fwhm':  7.,
         'max_fwhm': 15.,
     },
