@@ -5,6 +5,9 @@ import json
 DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 
 
+# This ugly construct is being replaced by a json-based approach
+# the will enable the scripts to run under batch mode (pipeline).
+
 # current_dataset = '19012,19019'   # 2400  1938-02-18 20:15:32 1938-02-19 22:49:10  next night
 # current_dataset = '16643,16646'   # 1200  1922-09-26 20:37:35 1922-09-26 22:09:21  same nigth
 # current_dataset = '17328,17337'   # 3600  1927-04-05 01:53:31 1927-04-28 22:50:24  3 weeks later
@@ -33,11 +36,7 @@ current_dataset = '9319,9320'     #  900  1956-12-03 20:27:18 1956-12-03 20:55:5
 # current_dataset = '9349,9350'
 
 
-def fname(name, datapath=DATAPATH):
-    return os.path.join(datapath, name)
-
-
-# image names are kep in a json file so the download
+# image names are kept in a json file so the download
 # code can update it with nem image names as soon as
 # images are downloaded.
 images_json = 'images.json'
@@ -50,10 +49,12 @@ except FileNotFoundError:
 except json.JSONDecodeError as e:
     print(f"JSON Error: {e}")
 
-
     
 # these functions replaced a (much simpler) dict with static parameters,
 # and are used for keeping backwards compatibility throughout the code.
+
+def fname(name, datapath=DATAPATH):
+    return os.path.join(datapath, name)
 
 def get_table_psf_nomatch(plate1, plate2):
         return 'table_psf_nomatch_' + str(plate1) + '_' + str(plate2) + '.fits'
@@ -78,6 +79,10 @@ def get_parameters(key):
     return par
 
 
+# Parameters that may require fine tuning specific to each dataset.
+# The defaults are, for now,  more appropriate to Grosser Schmidt-Spiegel 
+# datasets, since we are focussing on that telescope in particular. 
+
 parameters = {
     'default': {
         'nproc': 8,                                # number of performance processors (Mac M1)
@@ -87,9 +92,9 @@ parameters = {
         'elongation': 1.5,                         # less than
         'annular_bin': 5,                          # less or equals
         'flag_rim': 0,
-        'min_acceptable_flux': 15000,
+        'min_acceptable_flux': 10000,
         'min_fwhm':  5.,
-        'max_fwhm': 10.,
+        'max_fwhm': 15.,
         'qfit_max': 5.,
         'cfit_max': 5.,
         'invert_east':  [False,False],
@@ -151,8 +156,7 @@ parameters = {
         'min_acceptable_flux': 25000,
         'max_fwhm': 7.5,
     },
-    # candidate
-    '9319,9320': {
+    '9319,9320': {                         # candidate
         'annular_bin': 7,
         'min_acceptable_flux': 25000,
         'max_fwhm': 7.5,
@@ -191,8 +195,7 @@ parameters = {
     },
     '9324,9325': {              
     },
-    # possible candidate
-    '9325,9326': {              
+    '9325,9326': {                          # possible candidate
         'min_acceptable_flux': 25000,
     },
     '9326,9327': {              
@@ -207,7 +210,7 @@ parameters = {
     '9345,9346': {
         'max_fwhm': 15.,
     },
-    '9346,9347': {                # maybe a candidate?
+    '9346,9347': {                         # maybe a candidate?
         'min_fwhm': 6.5,
         'max_fwhm': 15.,
     },
@@ -242,6 +245,12 @@ parameters = {
 # Grosser Schmidt-Spiegel and includes only at least 3 plates taken 
 # on the same night, and overlapping more than 50% in area.
 
+# BEWARE that the plate ID sequence number does not necessarily 
+# corresponds with the time sequence. Script footprint_analysis.ipynb 
+# is not yet sorting then by time, but by plate ID number. Manual 
+# editing of the lists below may still needed to place plate IDs in
+# the proper temporal order.
+
 sequences = {
     'seq 00': [8794, 8795, 8796],
     'seq 01': [9167, 9168, 9169],
@@ -259,10 +268,4 @@ sequences = {
     'seq 13': [9550, 9551, 9552],
     'seq 14': [9553, 9555, 9556, 9557, 9558],
 }
-
-
-
-
-
-
 
