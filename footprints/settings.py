@@ -3,6 +3,7 @@ import json
 
 
 DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
+# DATAPATH = '/Volumes/backup/plateanalysis_data/footprints'
 
 
 # This ugly construct is being replaced by a json-based approach
@@ -34,6 +35,7 @@ current_dataset = '9319,9320'     #  900  1956-12-03 20:27:18 1956-12-03 20:55:5
 # current_dataset = '9347,9348'
 # current_dataset = '9348,9349'
 # current_dataset = '9349,9350'
+# current_dataset = '9537,9538'
 
 
 # image names are kept in a json file so the download
@@ -50,25 +52,33 @@ except json.JSONDecodeError as e:
     print(f"JSON Error: {e}")
 
     
-# these functions replaced a (much simpler) dict with static parameters,
+# these functions replace a (much simpler) dict with static parameters,
 # and are used for keeping backwards compatibility throughout the code.
 
 def fname(name, datapath=DATAPATH):
     return os.path.join(datapath, name)
 
+def get_table_sources(plate1, calib=False):
+    prefix = 'sources_'
+    if calib:
+        prefix = prefix + 'calib_'
+    return prefix + str(plate1) + '.csv'
+
 def get_table_psf_nomatch(plate1, plate2):
-        return 'table_psf_nomatch_' + str(plate1) + '_' + str(plate2) + '.fits'
+    return 'table_psf_nomatch_' + str(plate1) + '_' + str(plate2) + '.fits'
 
 def get_parameters(key):
-    par = parameters['default'] | parameters[key]
+    par = parameters['default']
+    if key in parameters:
+        par = par | parameters[key]
     
     plate1 = key.split(',')[0]
     plate2 = key.split(',')[1]
 
-    par['table1'] = 'sources_' + plate1 + '.csv'
-    par['table2'] = 'sources_' + plate2 + '.csv'
-    par['table1_calib'] = 'sources_calib_' + plate1 + '.csv'
-    par['table2_calib'] = 'sources_calib_' + plate2 + '.csv'
+    par['table1'] = get_table_sources(plate1)
+    par['table2'] = get_table_sources(plate2)
+    par['table1_calib'] = get_table_sources(plate1, calib=True)
+    par['table2_calib'] = get_table_sources(plate2, calib=True)
     par['table_matched'] = 'table_match_' + plate1 + '_' + plate2 + '.fits'
     par['table_non_matched'] = 'table_nomatch_' + plate1 + '_' + plate2 + '.fits'
     par['table_psf_nonmatched'] = get_table_psf_nomatch(plate1, plate2)
@@ -79,7 +89,7 @@ def get_parameters(key):
     return par
 
 
-# Parameters that may require fine tuning specific to each dataset.
+# Parameters that may require fine tuning, specific to each dataset.
 # The defaults are, for now,  more appropriate to Grosser Schmidt-Spiegel 
 # datasets, since we are focussing on that telescope in particular. 
 

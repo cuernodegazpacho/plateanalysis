@@ -175,7 +175,7 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
 
         cw = cutout.wcs
         pixdata = cutout.data
-        print(cutout.data.shape)
+#         print(cutout.data.shape)
 
         color_map = cm.gray
         if invert_color:
