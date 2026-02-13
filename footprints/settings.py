@@ -158,7 +158,8 @@ parameters = {
     },
     '9319,9320': {                         # candidate
         'annular_bin': 7,
-        'min_acceptable_flux': 25000,
+        'min_acceptable_flux': 20000,
+        'min_fwhm': 4.0,
         'max_fwhm': 7.5,
     },
     '9318,9319': {              
