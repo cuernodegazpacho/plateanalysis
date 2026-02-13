@@ -1,6 +1,5 @@
 import os
-
-from image_library import images
+import json
 
 
 DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
@@ -22,7 +21,7 @@ current_dataset = '9319,9320'     #  900  1956-12-03 20:27:18 1956-12-03 20:55:5
 # current_dataset = '9321,9322'
 # current_dataset = '9322,9323'
 # current_dataset = '9323,9324
-# current_dataset = '9324,9325'     # same night
+# current_dataset = '9324,9325'
 # current_dataset = '9325,9326'     #   -   possible candidate
 # current_dataset = '9326,9327'
 # current_dataset = '9327,9328'
@@ -38,6 +37,21 @@ def fname(name, datapath=DATAPATH):
     return os.path.join(datapath, name)
 
 
+# image names are kep in a json file so the download
+# code can update it with nem image names as soon as
+# images are downloaded.
+images_json = 'images.json'
+try:
+    json_file = open(images_json, 'r')
+    images = json.load(json_file)
+
+except FileNotFoundError:
+    print(f"Error: File {images_json} was not found.")
+except json.JSONDecodeError as e:
+    print(f"JSON Error: {e}")
+
+
+    
 # these functions replaced a (much simpler) dict with static parameters,
 # and are used for keeping backwards compatibility throughout the code.
 
