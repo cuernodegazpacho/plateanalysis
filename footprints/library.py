@@ -23,8 +23,23 @@ Library with functions or classes that are (or were) either:
 
  - used more than in one script;
  - used by parallelization code (to avoid namespace conflicts)
- 
 '''
+
+def is_in_jupyter():
+    '''
+    Finds if the code is running in a jupyter notebook
+    '''
+    try:
+        from IPython import get_ipython
+        # Check if the function exists and if a config object is present
+        if get_ipython() is not None and 'IPKernelApp' in get_ipython().config:
+            return True
+        else:
+            return False
+    except NameError:
+        return False
+    except ImportError:
+        return False
 
 
 def fit_fwhm(data, *, xypos=None, fwhm=None, fit_shape=None, mask=None, error=None):
@@ -160,7 +175,7 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
 
         cw = cutout.wcs
         pixdata = cutout.data
-        print(cutout.data.shape)
+        print("cutout shape:", cutout.data.shape, "px")
 
         color_map = cm.gray
         if invert_color:
@@ -194,8 +209,8 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
     fig.suptitle(str(title))
     
     plt.tight_layout()
-    
 
+    
 def clean_bad_fits(table, par):
     '''
     Remove rows based on criteria produced by the fit_fwhm function.
