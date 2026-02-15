@@ -6,8 +6,9 @@ DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 # DATAPATH = '/Volumes/backup/plateanalysis_data/footprints'
 
 
-# This ugly construct is being replaced by a json-based approach
-# the will enable the scripts to run under batch mode (pipeline).
+# keep these in here just for convenience. The pipeline code
+# handles this, but for running notebooks manually, set the
+# desired dataset key in file dataset.json
 
 # current_dataset = '19012,19019'   # 2400  1938-02-18 20:15:32 1938-02-19 22:49:10  next night
 # current_dataset = '16643,16646'   # 1200  1922-09-26 20:37:35 1922-09-26 22:09:21  same nigth
@@ -16,7 +17,7 @@ DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 # current_dataset = '62330,62343'   # 1500  1944-04-14 21:34:49 1944-05-11 21:49:20  1 month later
 # current_dataset = '63438,63440'   #  900  1952-09-16 23:24:11 1952-09-18 00:04:08  two nights later
 # current_dataset = '9528,9553'     #  600  1957-05-20 23:47:07 1957-05-31 00:07:53  2 weeks later
-current_dataset = '9319,9320'     #  900  1956-12-03 20:27:18 1956-12-03 20:55:56  same night  - CANDIDTE
+# current_dataset = '9319,9320'     #  900  1956-12-03 20:27:18 1956-12-03 20:55:56  same night  - CANDIDTE
 # current_dataset = '9318,9319'     # same night - this and all below
 # current_dataset = '9317,9318      
 # current_dataset = '9316,9317'
@@ -38,8 +39,21 @@ current_dataset = '9319,9320'     #  900  1956-12-03 20:27:18 1956-12-03 20:55:5
 # current_dataset = '9537,9538'
 
 
-# image names are kept in a json file so the download
-# code can update it with nem image names as soon as
+# To support pipleine mode, the current data set
+# name is kept in a json file.
+dataset_json = 'dataset.json'
+try:
+    json_file = open(dataset_json, 'r')
+    dataset_dict = json.load(json_file)
+    current_dataset = dataset_dict['current_dataset']
+except FileNotFoundError:
+    print(f"Error: File {images_json} was not found.")
+except json.JSONDecodeError as e:
+    print(f"JSON Error: {e}")
+    
+
+# Image names are kept in a json file so the download
+# code can update it with new image names as soon as
 # images are downloaded.
 images_json = 'images.json'
 try:
@@ -167,10 +181,10 @@ parameters = {
         'max_fwhm': 7.5,
     },
     '9319,9320': {                         # candidate
-        'annular_bin': 7,
+        'annular_bin': 6,
         'min_acceptable_flux': 20000,
         'min_fwhm': 4.0,
-        'max_fwhm': 7.5,
+        'max_fwhm': 10.,
     },
     '9318,9319': {              
         'annular_bin': 4,
