@@ -9,11 +9,11 @@ import matplotlib.cm as cm
 from astropy import units as u
 from astropy.io import fits
 from astropy.wcs import WCS
+from astropy.table import Table, join, hstack
 from astropy.nddata.utils import Cutout2D
 from astropy.coordinates import SkyCoord, ICRS
 from astropy.nddata import NoOverlapError
 from astropy.utils.exceptions import AstropyUserWarning
-
 
 from photutils.psf import fit_2dgaussian
 
@@ -236,7 +236,7 @@ def clean_bad_fits(table, par):
 
 class Worker:
     '''
-    Class with callable instances that executes the double loop in script
+    Class with callable instances that execute the double loop in script
     find_mismatches.ipynb. The loop scans both tables, looking for coordinate
     matches between entries in each one. 
 
@@ -360,5 +360,58 @@ class Worker2(Worker):
                     break
 
         return self.matched_rows
+
+
+class FitWorker:
+    '''
+    Class with callable instances that uses fit_fwhm to fit Gaussians over a 
+    list of x,y positions on an image.  
+
+    It provides the callable for the `Pool.apply_async` function, and also
+    holds all parameters necessary to perform the fits.
+    '''
+    def __init__(self, name, data, table, index_init, index_end, fwhm=8., fit_shape=31):
+        '''
+        Parameters:
+
+        name       - id string for this worker
+        data       - numpy array with image
+        table      - sources table with x,y positions to be fitted (px)
+        index_init - initial value for the table index handled by this worker
+        index_end  - final value for the table index handled by this worker
+        fwhm       - initial guess.
+        fit_shape  - size of fit box around each x,y position
+
+        Returns:
+
+        table that results from the hstack operation over the input table,
+        and the table in the PSFPhotometry ".results" field
+        '''
+        self.name = name
+        self.data = data
+        self.table = table[index_init:index_end]
+
+        self.fwhm = fwhm
+        self.fit_shape = fit_shape
+        
+        # build list with x,y positions to fit
+        x_pos = list(self.table['x_source'])
+        y_pos = list(self.table['y_source'])
+        
+        self.xypos = list(zip(x_pos, y_pos))
+        
+        print("Worker ", name, " - ", index_init, index_end, flush=True)
+        
+    def __call__(self):
+
+        fwhm_values, phot = fit_fwhm(self.data, xypos=self.xypos, fwhm=self.fwhm, fit_shape=self.fit_shape)
+        
+        result = hstack([self.table, phot.results])
+
+        print("Worker ", self.name, " - ended.", flush=True)
+        return result
+
+
+
     
 
