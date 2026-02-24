@@ -1,3 +1,4 @@
+import json
 import warnings
 
 import numpy as np
@@ -15,6 +16,7 @@ from astropy.coordinates import SkyCoord, ICRS
 from astropy.nddata import NoOverlapError
 from astropy.utils.exceptions import AstropyUserWarning
 
+from photutils.profiles import RadialProfile
 from photutils.psf import fit_2dgaussian
 
 
@@ -40,6 +42,21 @@ def is_in_jupyter():
         return False
     except ImportError:
         return False
+    
+    
+def update_dataset(key):
+    '''
+    Update the 'dataset.json' file with the name of the dataset to
+    be used next as a dict key by the pipeline code
+    '''
+
+    dataset_dict = {"current_dataset": key}
+
+    try:
+        json_file = open('dataset.json', 'w')
+        json.dump(dataset_dict, json_file, indent=4)
+    except IOError as e:
+        print(f"Error writing to file: {e}")
 
 
 def fit_fwhm(data, *, xypos=None, fwhm=None, fit_shape=None, mask=None, error=None):
@@ -110,7 +127,7 @@ def make_sky_coords(table, wcs):
     return result
 
 
-def remove_outsiders(image, wcs, table, wcs_table=None):
+def remove_outsiders(image, wcs, table, wcs_table=None, debug=False):
     '''
     Checks a set of coordinates against an image file to see if any
     coordinates fall outside the image's footprint.
@@ -128,11 +145,20 @@ def remove_outsiders(image, wcs, table, wcs_table=None):
         
     mask = coords.contained_by(wcs, image=image)
 
+    if debug:
+        print(len(coords))
+        print(coords)
+        print(mask)
+        print(np.any(mask))
+        print(wcs)
+        print(image.shape)
+
+    
     return table[mask]
 
 
 def plot_images(file1, file2, target_coords, size, title, invert_color=False, 
-                invert_north=[False,False], invert_east=[False,False]):
+                figsize=(10, 5), invert_north=[False,False], invert_east=[False,False]):
     '''
     Function that plots side-by-side image cutouts coming from two files. 
     The cutouts are aligned via celestial coordinates.
@@ -143,19 +169,22 @@ def plot_images(file1, file2, target_coords, size, title, invert_color=False,
     file2         - image file for the image ploted at the righ position on screen, or None
     target_coords - the SkyCoord instance with the center coordinates of the cutouts
     size          - size of the (square) cutout size, in degrees
-    title         - the plot title
+    title         - the plot title, or None
     invert_color  - use inverted color scale?
+    figsize       - plot size
     invert_north  - True if the plot should be flipped N-S
     invert_east   - True if the plot should be flipped E-W
     '''    
     cutout1, cutout2 = get_cutouts(file1, file2, target_coords, size)
 
-    plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=invert_color, 
-                invert_north=invert_north, invert_east=invert_east)
+    fig1, ax1, ax2 = plot_cutouts(cutout1, cutout2, target_coords, title, marker_right='rx',
+                                  invert_color=invert_color, figsize=figsize, 
+                                  invert_north=invert_north, invert_east=invert_east)
     
         
-def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False, 
-                invert_north=[False, False], invert_east=[False, False]):
+def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
+                 figsize=(10, 5), marker_left="None", marker_right="None",
+                 invert_north=[False, False], invert_east=[False, False]):
     '''
     Function that plots side-by-side image cutouts. The cutouts are aligned
     via celestial coordinates.
@@ -165,13 +194,21 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
     cutout1       - image cutout
     cutout2       - image cutout, or None
     target_coords - the SkyCoord instance with positions to mark
-    title         - the plot title
+    title         - the plot title, or None
     invert_color  - use inverted color scale?
+    figsize       - plot size
     invert_north  - True if the plot should be flipped N-S
     invert_east   - True if the plot should be flipped E-W
-    '''    
+    marker_left   - marker to be used on the left plot
+    marker_right  - marker to be used on the right plot
     
-    def _plot(index, cutout, target_coords, title, invert_color, invert_north, invert_east):
+    Return:
+    
+    fig_1         - Figure where the plots were drawn
+    ax_1, ax_2    - Axis objects for each one of the plots (ax_2 can be None) 
+    '''    
+    def _plot(figure, index, cutout, target_coords, title, invert_color, 
+              invert_north, invert_east, marker="None"):
 
         cw = cutout.wcs
         pixdata = cutout.data
@@ -181,7 +218,7 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
         if invert_color:
             color_map = cm.gray_r
 
-        ax = fig.add_subplot(1,2, index, projection=cw)
+        ax = figure.add_subplot(1,2, index, projection=cw)
 
         image = ax.imshow(pixdata, origin='lower', cmap=color_map)
 
@@ -194,23 +231,147 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
         if invert_east[1]:
             ax.invert_xaxis()
 
-        ax.plot(target_coords.ra.deg, target_coords.dec.deg, 'rx', transform=ax.get_transform('world'))
+        ax.plot(target_coords.ra.deg, target_coords.dec.deg, marker, transform=ax.get_transform('world'))
 
         ax.grid(color='white', ls='solid')
+        
+        return ax
     
 
-    fig = plt.figure(figsize=(10, 5))
+    fig_1 = plt.figure(figsize=figsize)
 
-    _plot(1, cutout1, target_coords, title, invert_color, invert_north, invert_east)
+    ax_1 = _plot(fig_1, 1, cutout1, target_coords, title, invert_color, invert_north, invert_east, marker=marker_left)
     
+    ax_2 = None
     if cutout2 is not None:
-        _plot(2, cutout2, target_coords, title, invert_color, invert_north, invert_east)
+        ax_2 = _plot(fig_1, 2, cutout2, target_coords, title, invert_color, invert_north, invert_east, marker=marker_right)
     
-    fig.suptitle(str(title))
+    if title is not None:
+        fig_1.suptitle(str(title))
     
     plt.tight_layout()
+    
+    return fig_1, ax_1, ax_2
+    
+    
+def plot_profile(ax, profile, positions, sid, source_id, label_flag, title):
+    '''
+    Code that is common to both plot types
+    '''
+    # normalize
+    pr_max = np.max(profile)
+    pr_min = np.min(profile)
+    profile = (profile - pr_min) / (pr_max - pr_min)
+
+    label, color, linewidth, label_flag = make_labels(sid, source_id, label_flag)
+
+    ax.plot(positions, profile, label=label, color=color, linewidth=linewidth)
+
+    ax.set_xlabel("Position (pix)")
+    ax.set_ylabel("Profile")
+    ax.set_title(title)
+    ax.legend()
+    
+    return label_flag
+
+
+def get_pixel_coords(table, source_id, cutout, wcs_original):
+    '''
+    Gets pixel coordinates for a source on a cutout.
+    
+    Parameters:
+
+    table        - table with source data
+    source_id    - the source ID that identifies the table row
+    cutout       - image cutout
+    wcs_original - the WCS of the original image where the cutout was taken from
+    
+    Returns:
+    
+    x,y coordinates in pixels
+    '''
+    # get 1-row table with desired source
+    mask = table['source_id'] == source_id
+    t1 = table[mask]
+
+    # compute pixel coords in cutout 
+    sky_coord = make_sky_coords(t1, wcs_original)
+    cutout_coords = cutout.wcs.world_to_pixel(sky_coord)
+
+    return cutout_coords[0][0], cutout_coords[1][0]
+
+
+def make_radial_profile(table, source_id, cutout, wcs_original, edge_radii):
+    '''
+    Makes a radial profile around position in image.
+    
+    Parameters:
+
+    table        - table with X,Y pixel coordinates of object
+    source_id    - the source ID that identifies the table row
+    cutout       - image cutout
+    wcs_original - the WCS of the original image where the cutout was taken from
+    edge_radii   - array of radii defining the edges of the radial bins
+    
+    Returns:
+    
+    RadialProfile instance
+    '''
+    x, y = get_pixel_coords(table, source_id, cutout, wcs_original)
+    
+    rp = RadialProfile(cutout.data, [x, y], edge_radii)
+    
+    return rp
+
+
+def make_labels(sid, source_id, label_flag):
+    '''
+    Encapsulates logic for handling plot labels and colors in profile plots
+    '''
+    color = 'blue'
+    linewidth = 0.5
+    if label_flag:
+        label = 'field stars'
+        label_flag = False
+    else:
+        label = None
+
+    if sid == source_id:
+        color = 'red'
+        label = 'target object'
+        linewidth = 1.0
+        
+    return label, color, linewidth, label_flag
 
     
+def plot_radial_profiles(ax, table, source_id, cutout, wcs_original, edge_radii, title):
+    '''
+    Plots radial profiles for all rows in a table.
+    
+    Parameters:
+
+    ax           - the axis where to plot
+    table        - table with X,Y pixel coordinates of object
+    source_id    - the source ID that identifies the table row
+    cutout       - image cutout
+    wcs_original - the WCS of the original image where the cutout was taken from
+    edge_radii   - array of radii defining the edges of the radial bins
+    title        - plot title
+    '''
+    label_flag = True
+    
+    for row in range(len(table)):
+        sid = table['source_id'][row]
+        rp = make_radial_profile(table, sid, cutout, wcs_original, edge_radii)
+        
+        positions = rp.radius
+        profile = rp.profile
+        
+        label_flag = plot_profile(ax, profile, positions, sid, source_id, label_flag, title)
+
+    plt.tight_layout()
+
+
 def clean_bad_fits(table, par):
     '''
     Remove rows based on criteria produced by the fit_fwhm function.
@@ -273,6 +434,9 @@ class Worker:
         # results go in this list
         self.matched_rows = []
         
+        # must be True in order to compare a table with itself
+        self.skip_self = False
+        
         # to help reporting percentage already executed
         self.ncount = 0
         self.nrange = index_end - index_init
@@ -287,18 +451,75 @@ class Worker:
             
             self.ncount += 1
                 
-            # Internal loop scans the newer plate. We scan the entire table for every entry
-            # in the first table. 
+            # Internal loop scans the newer plate. 
+            # We scan the entire table for every entry in the first 
+            # table. Not the most efficient code by far; we keep
+            # it here because the vectorized approach, which avoids
+            # the internal loop in i2, is still being tested.
+            
+#             for i2 in range(len(self.table2)):
+#                 if self.matched(i1, i2):
+#                     self.matched_rows.append(i1)
+#                     break
 
-            for i2 in range(len(self.table2)):
-                
-                if self.matched(i1, i2):
-                    self.matched_rows.append(i1)
-                    break
+            # use vectorized matching code
+            if self.matched_vectorized(i1):
+                self.matched_rows.append(i1)
 
         return self.matched_rows
     
+    def matched_vectorized(self, i1):
+        
+        # when running under a multiprocessing environment, error messages tend
+        # to disappear with no trace. The trick to debug is to capture anything
+        # with a try-except block and forcibly generate an output. Just the error
+        # message is usually enough to tell what went wrong.
+        try:
+            # reference element from 1st table, row i1
+            x_ref_elem = abs(self.table1[self.x_label][i1])
+            y_ref_elem = abs(self.table1[self.y_label][i1])
+            
+            # values to be compared with are in 2nd table
+            x_values = abs(self.table2[self.x_label])
+            y_values = abs(self.table2[self.y_label])
+
+            # when comparing a table with itself, use just rows forward of row i1
+            if self.skip_self and i1 < len(self.table2)-1:
+                x_values = abs(self.table2[self.x_label])[i1+1:]
+                y_values = abs(self.table2[self.y_label])[i1+1:]
+
+            # flag points outside the tolerance interval in X
+            new_x_values   = np.where(x_values     > abs(x_ref_elem + self.tolerance), 0.0, x_values)
+            new_x_values_2 = np.where(new_x_values < abs(x_ref_elem - self.tolerance), 0.0, new_x_values)
+
+            # ditto in Y            
+            new_y_values   = np.where(y_values     > abs(y_ref_elem + self.tolerance), 0.0, y_values)
+            new_y_values_2 = np.where(new_y_values < abs(y_ref_elem - self.tolerance), 0.0, new_y_values)
+
+            # anything that survived the above filtering in both X and Y will show as a 
+            # non-zero value in the product.
+            prod = new_x_values_2 * new_y_values_2            
+
+            if not np.any(prod):
+                # only zeros; no match
+                return False
+
+        except Exception as e:
+            print("ERROR in vectorized matching code:  ", str(e), flush=True)
+
+        # found a match
+
+        percent = int((float(self.ncount) / float(self.nrange)) * 100.) 
+        if not i1 % 2000:
+            print(self.name, " - ", str(percent)+'%', ". ", i1, self.table1['source_id'][i1], flush=True)
+
+            
+        return True
+    
     def matched(self, i1, i2):
+        ### No longer used, but we keep it in here to provide a reference
+        ### to the old code's results.
+
         # look for matching coordinates
         dx = abs(self.table1[self.x_label][i1] - self.table2[self.x_label][i2])
 
@@ -312,7 +533,7 @@ class Worker:
         if dy > self.tolerance:
             return False
 
-        # coordinates match
+        # found a match
 
         percent = int((float(self.ncount) / float(self.nrange)) * 100.) 
 
@@ -321,7 +542,7 @@ class Worker:
             
         return True
 
-
+    
 class Worker2(Worker):
     '''
     Subclass that looks for duplications in a single table.
@@ -339,9 +560,10 @@ class Worker2(Worker):
         Returns:
 
         list with indices in the table that have duplications.
-        '''
-        
+        '''        
         super().__init__(name, table1, table1, index_init, index_end)
+        
+        self.skip_self = True
                         
     def __call__(self):
         
@@ -352,12 +574,16 @@ class Worker2(Worker):
             self.ncount += 1
                 
             # Internal loop scans only what wasn't scanned yet.
+            # No lunger used; kept in here for reference only.
 
-            for i2 in range(i1+1, len(self.table2)):
-                
-                if self.matched(i1, i2):
-                    self.matched_rows.append(i1)
-                    break
+#             for i2 in range(i1+1, len(self.table2)):
+#                 if self.matched(i1, i2):
+#                     self.matched_rows.append(i1)
+#                     break
+
+            # vectorized
+            if self.matched_vectorized(i1):
+                self.matched_rows.append(i1)
 
         return self.matched_rows
 
@@ -389,6 +615,10 @@ class FitWorker:
         '''
         self.name = name
         self.data = data
+        
+        self.index_init = index_init
+        self.index_end  = index_end
+        
         self.table = table[index_init:index_end]
 
         self.fwhm = fwhm
@@ -404,11 +634,22 @@ class FitWorker:
         
     def __call__(self):
 
+        # this print is redundant with the supercalss' constructor print, but necessary
+        # when running the pipeline (the superclass' print doesn't output under the pipeline)
+#         print("Worker ", self.name, " - started. From row ", self.index_init, "to row", self.index_end, flush=True)
+
+        # this is basically overriding the warnings setup in function fit_fwhm. We leave the warning
+        # in the function for compatibility with the code it overrides.
+        warnings.filterwarnings('ignore', category=AstropyUserWarning, message=".*One or more fit.*")
+
+        # this function seems to not work efficiently under a parallelized environment. Perhaps it
+        # puts a global lock on the data, somehow. 
         fwhm_values, phot = fit_fwhm(self.data, xypos=self.xypos, fwhm=self.fwhm, fit_shape=self.fit_shape)
         
         result = hstack([self.table, phot.results])
 
         print("Worker ", self.name, " - ended.", flush=True)
+
         return result
 
 
