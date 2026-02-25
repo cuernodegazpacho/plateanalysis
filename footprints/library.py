@@ -10,14 +10,22 @@ import matplotlib.cm as cm
 from astropy import units as u
 from astropy.io import fits
 from astropy.wcs import WCS
-from astropy.table import Table, join, hstack
+from astropy.table import Table, join, hstack, vstack
+from astropy.time import Time
 from astropy.nddata.utils import Cutout2D
-from astropy.coordinates import SkyCoord, ICRS
+from astropy.coordinates import SkyCoord, ICRS, EarthLocation
 from astropy.nddata import NoOverlapError
+from astropy.stats import SigmaClip
 from astropy.utils.exceptions import AstropyUserWarning
 
+from erfa import ErfaWarning
+from earthshadow import get_shadow_center, get_shadow_radius, dist_from_shadow_center
+
+from photutils.background import Background2D, MedianBackground, ModeEstimatorBackground
 from photutils.profiles import RadialProfile
 from photutils.psf import fit_2dgaussian
+
+from settings import fname
 
 
 '''
@@ -247,7 +255,7 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
         ax_2 = _plot(fig_1, 2, cutout2, target_coords, title, invert_color, invert_north, invert_east, marker=marker_right)
     
     if title is not None:
-        fig_1.suptitle(str(title))
+        fig_1.suptitle(str(title), horizontalalignment='left', x=0.05)
     
     plt.tight_layout()
     
@@ -395,6 +403,216 @@ def clean_bad_fits(table, par):
     return table_1
 
 
+def plot_analysis_results(table, table_matched, index, par, flux_range, edge_radii):
+    '''
+    Builds 4-pane plot with final analsyis results.
+    
+    Parameters:
+    
+    table         - table with non-matched objects, with their PSFs already fitted
+    table_matched - table with matched objects, with no PSF fitted
+    index         - index in non-matched table where the target object lives
+    par           - parameter dict
+    flux_range    - range of peak flux where to accept stars for profile analysis
+    edge_radii    - radii used to build radial profiles
+    '''
+    # pick up one row in the non-matched table; extract info
+    plate_id = table['plate_id_1'][index]
+    source_id = table['source_id'][index]
+    ra  = table['ra_icrs'][index]
+    dec = table['dec_icrs'][index]
+    annular_bin = table['annular_bin_1'][index]
+    target_flux_max = table['flux_max'][index] 
+    
+    # mid-exposure time and WCS from image header
+    header_1 = fits.getheader(fname(par['image1']))
+    header_2 = fits.getheader(fname(par['image2']))
+
+    wcs_1 = WCS(header_1)
+    
+    time_stamp_1 = header_1['DATE-AVG']
+    time_event_1 = Time(time_stamp_1)
+    time_stamp_2 = header_2['DATE-AVG']
+    
+    # Earth's shadow
+    es_1 = get_earth_shadow(ra, dec, time_event_1)
+    formatted_es_1 = "{:.1f}".format(es_1[0])
+    
+    # we need the plate ID of the second plate, to display it in the title string
+    table_2_name = par['table2']
+    plate_id_2 = table_2_name.split('_')[1].split('.')[0]
+
+    # title
+    title = "Plate ID: " + str(plate_id) + "   "
+    title = title + "DATE-AVG: " + str(time_stamp_1) + "    " 
+    title = title + "Source ID: " + str(source_id) + "    " 
+    title = title + "Annular Bin: " + str(annular_bin) + "    " + "\n"
+    title = title + "Plate ID: " + str(plate_id_2) + "   "
+    title = title + "DATE-AVG: " + str(time_stamp_2) + "    " 
+    title = title + "Earth's shadow: " + formatted_es_1 + " deg." 
+    
+    # Cutout around target is small so we can see the target structure.
+    # Neighborhood cutout picks up more stars for radial profile comparison
+    target_cutout_size = float(par['display_cutout_size']) / 60. * u.deg    
+    neighborhood_cutout_size = float(par['neighborhood_cutout_size']) / 60. * u.deg
+
+    # sky coords for the target object
+    target_coords = SkyCoord(ra=ra, dec=dec, unit='deg')
+
+    # plot cutouts around target, for both images
+    plot_images(fname(par['image1']), fname(par['image2']), target_coords, target_cutout_size, title, 
+                invert_east=par['invert_east'], invert_north=par['invert_north'])
+    
+    # cutout for neighborhood needs to be explicitly handled here
+    cutout_1, no_need = get_cutouts(fname(par['image1']), fname(par['image2']), 
+                                    target_coords, neighborhood_cutout_size)
+    
+
+    # on the matched table, filter out rows that fall outside the neighborhood cutout footprint
+    table_neighborhood = remove_outsiders(cutout_1.data, cutout_1.wcs, table_matched, wcs_table=wcs_1)
+    
+    # now, filter out rows that have peak flux off by more than a given limit
+    mask = table_neighborhood['flux_max'] < (target_flux_max * (1. + flux_range))
+    table_neighborhood = table_neighborhood[mask]
+    mask = table_neighborhood['flux_max'] > (target_flux_max * (1. - flux_range))
+    table_neighborhood = table_neighborhood[mask]
+
+    # skip profile plot if neighborhood is empty of stars with same flux
+    if len(table_neighborhood) < 1:
+        return
+        
+    # arrays with celestial coordinates for displaying on the image
+    coords = make_sky_coords(table_neighborhood, wcs_1)
+
+    fig_1, ax_1, ax_2 = plot_cutouts(cutout_1, None, coords, None, figsize=(10,5), marker_left='rx',
+                                     invert_east=par['invert_east'], invert_north=par['invert_north'])
+    
+    # to generate radial profiles, the pixel data must be inverted,
+    # and background must be subtracted
+    cutout_1.data = 65535. - cutout_1.data
+
+    sigma_clip = SigmaClip(sigma=3.)
+    bkg_estimator = MedianBackground()
+    bkg_1 = Background2D(cutout_1.data, 40, filter_size=3, exclude_percentile=20.0, 
+                         sigma_clip=sigma_clip, bkg_estimator=bkg_estimator)
+
+    cutout_1.data = cutout_1.data - bkg_1.background  
+
+    # fit PSFs to the selected neighborhood stars. Convert from px in the image to px in the cutout
+    fwhm_init = par['fwhm_init']
+    fit_shape = par['fit_shape']
+    cutout_coords = cutout_1.wcs.world_to_pixel(coords)
+    xypos = list(zip(cutout_coords[0], cutout_coords[1]))
+    fwhm_values_nomatch, phot_neighborhood = fit_fwhm(cutout_1.data, xypos=xypos, fwhm=fwhm_init, fit_shape=fit_shape)
+    table_neighborhood_psf = hstack([table_neighborhood, phot_neighborhood.results])
+    
+    table_neighborhood_psf = clean_bad_fits(table_neighborhood_psf, par)
+
+    # add target object to stars table. The radial profile plot routine requires that.
+    table_all_neighborhood = vstack([table_neighborhood_psf, table[index]])
+    
+    ax = fig_1.add_subplot(122)
+
+    plot_radial_profiles(ax, table_all_neighborhood, source_id, cutout_1, wcs_1, edge_radii, 'Radial profile and stats')
+
+    text = build_stats_text(table[index], table_neighborhood_psf)
+    
+    props = dict(boxstyle='square', facecolor='white', alpha=0.3)
+    ax.text(0.74, 0.60, text, multialignment='left', transform=ax.transAxes, fontsize=10,
+            verticalalignment='center', horizontalalignment='center', bbox=props)
+    
+    plt.show()
+    plt.close()
+    
+
+stat_pars = {'fwhm':     {'name': 'FWHM               ', 'column': 'fwhm_fit',     'flags': True},
+             'fwhmerr':  {'name': 'FWHM error      ',    'column': 'fwhm_err',     'flags': True},
+             'elong':    {'name': 'Elongation        ',  'column': 'elongation',   'flags': False},
+             'profdiff': {'name': 'RMS profile diff   ', 'column': 'profile_diff', 'flags': False},
+            }
+
+def build_stats_text(table_object, table_stars):
+    '''
+    Builds multi-line text to populate the profile plot widget. 
+    
+    The stat_params data structure controls the text contents.
+    
+    Parameters:
+    
+    table_object  -  1-row table with the object
+    table_stars   -  table with stars in the neighborhood
+    '''
+    flags = table_object['flags']
+
+    text = "Target object\n"
+
+    try:
+        for key in list(stat_pars.keys()):
+            name = stat_pars[key]['name']
+
+            mark = " "
+            if flags > 0 and stat_pars[key]['flags']:
+                mark = "*"
+
+            value_object = table_object[stat_pars[key]['column']]
+            value_object_string = f"{value_object:5.2f}" + " " + mark
+            
+            text = text + name + " " + value_object_string + "\n"
+    except KeyError:
+        pass
+
+    text = text + "\nField stars   (avg - stdev)\n"
+
+    try:
+        for key in list(stat_pars.keys()):
+
+            name = stat_pars[key]['name']
+            value_stars_av = np.mean(table_stars[stat_pars[key]['column']])
+            value_stars_st = np.std(table_stars[stat_pars[key]['column']])
+
+            value_stars_av_string = f"{value_stars_av:5.2f}"
+            value_stars_st_string = f"{value_stars_st:5.2f}"
+            
+            text = text + name + " " + value_stars_av_string + " - " +  value_stars_st_string  + "\n"
+    except KeyError:
+        pass
+
+    return text
+
+
+def get_earth_shadow(ra, dec, time_event):
+    '''
+    Get angular distance from point on the sky, and center of Earth's shadow.
+    
+    Computed at GEO altitude
+    
+    Parameters:
+    
+    ra   -  coordinates
+    dec  -
+    time -  time
+    
+    Return:
+    
+    - distance in degrees
+    - boolean: True - is in shadow; False - is not in shadow
+    '''
+    longitude = 10.242    # TODO: take this from main csv input file instead
+    latitude  = 53.482
+
+    location = EarthLocation.from_geodetic(longitude, latitude, 0.0)
+    es_radius = get_shadow_radius(orbit='GEO', geocentric_angle=False)
+    
+    dist = dist_from_shadow_center(ra, dec, time=time_event, obs=location, orbit='GEO')
+    for i, d in enumerate(dist):
+        if d < es_radius - 2*u.deg:
+            in_shadow = "in"
+        else:
+            in_shadow = "not"
+            
+    return dist.to_value(u.deg)[0], in_shadow
+
+    
 class Worker:
     '''
     Class with callable instances that execute the double loop in script
@@ -455,7 +673,7 @@ class Worker:
             # We scan the entire table for every entry in the first 
             # table. Not the most efficient code by far; we keep
             # it here because the vectorized approach, which avoids
-            # the internal loop in i2, is still being tested.
+            # the internal loop in i2, is still being evaluated.
             
 #             for i2 in range(len(self.table2)):
 #                 if self.matched(i1, i2):
@@ -596,7 +814,7 @@ class FitWorker:
     It provides the callable for the `Pool.apply_async` function, and also
     holds all parameters necessary to perform the fits.
     '''
-    def __init__(self, name, data, table, index_init, index_end, fwhm=8., fit_shape=31):
+    def __init__(self, name, data, table, index_init, index_end, par):
         '''
         Parameters:
 
@@ -605,8 +823,7 @@ class FitWorker:
         table      - sources table with x,y positions to be fitted (px)
         index_init - initial value for the table index handled by this worker
         index_end  - final value for the table index handled by this worker
-        fwhm       - initial guess.
-        fit_shape  - size of fit box around each x,y position
+        par        - parameter dict from settings.py
 
         Returns:
 
@@ -621,8 +838,8 @@ class FitWorker:
         
         self.table = table[index_init:index_end]
 
-        self.fwhm = fwhm
-        self.fit_shape = fit_shape
+        self.fwhm = par['fwhm_init']
+        self.fit_shape = par['fit_shape']
         
         # build list with x,y positions to fit
         x_pos = list(self.table['x_source'])

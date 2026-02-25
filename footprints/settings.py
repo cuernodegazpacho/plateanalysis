@@ -89,15 +89,17 @@ parameters = {
         'annular_bin': 5,                          # less or equals
         'flag_rim': 0,
         # PSF analysis
+        'fwhm_init': 8.,
+        'fit_shape': 31,
         'max_flux_threshold': 0.1,
         'min_acceptable_flux': 500,
         'min_fwhm':  4.,
         'max_fwhm': 15.,
         'qfit_max': 4.,
         'cfit_max': 0.003,
-        'neighborhood_cutout_size': 7.,           # full side of square, arcmin
+        'neighborhood_cutout_size': 7.0,          # full side of square, arcmin
         # display
-        'display_cutout_size': 1.,                # full side of square, arcmin
+        'display_cutout_size': 1.0,               # full side of square, arcmin
         'profile_diff_threshold': 0.04,           # checked with false positives
         'elongation_limit': 1.2,
         'plot_limit': 100,
