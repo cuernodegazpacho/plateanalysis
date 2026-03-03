@@ -22,6 +22,7 @@ from erfa import ErfaWarning
 from earthshadow import get_shadow_center, get_shadow_radius, dist_from_shadow_center
 
 from photutils.background import Background2D, MedianBackground, ModeEstimatorBackground
+from photutils.aperture import CircularAperture, aperture_photometry, CircularAnnulus, ApertureStats
 from photutils.profiles import RadialProfile
 from photutils.psf import fit_2dgaussian
 
@@ -52,6 +53,81 @@ def is_in_jupyter():
         return False
     
     
+def is_false_positive(table, row_index, par):
+    '''
+    Detects false positives that were missed by sextractor.
+    
+    The rejection criterion is applied on the ratio of source
+    fluxes derived by aperture photometry on the first and
+    second images of a dataset pair. 
+    
+    Parameters:
+    
+    table     - table with non-matched sources
+    row_index - row with target object
+    par       - parameter dict
+    
+    Returns:
+    
+    True if a source is detected on the second image; False otherwise
+    
+    '''
+    # read both images from the current dataset
+    f_1 = fits.open(fname(par['image1']))
+    f_2 = fits.open(fname(par['image2']))
+
+    wcs_1 = WCS(f_1[0].header)
+    wcs_2 = WCS(f_2[0].header)
+    data_1 = f_1[0].data
+    data_2 = f_2[0].data
+                             
+    # get target coordinates
+    ra  = table['ra_icrs'][row_index]    
+    dec = table['dec_icrs'][row_index]  
+    target_coords = SkyCoord(ra=ra, dec=dec, unit='deg')
+    
+    pixel_coords_1 = wcs_1.world_to_pixel(target_coords)
+    pix_x_1 = pixel_coords_1[0]
+    pix_y_1 = pixel_coords_1[1]
+    pixel_coords_2 = wcs_2.world_to_pixel(target_coords)
+    pix_x_2 = pixel_coords_2[0]
+    pix_y_2 = pixel_coords_2[1]
+    
+    # aperture photometry on each image
+    positions_1 = [(pix_x_1, pix_y_1)]
+    positions_2 = [(pix_x_2, pix_y_2)]
+
+    aperture_1 = CircularAperture(positions_1, r=5.0)
+    aperture_2 = CircularAperture(positions_2, r=5.0)
+
+    phot_table_1 = aperture_photometry(data_1, aperture_1)
+    phot_table_2 = aperture_photometry(data_2, aperture_2)
+
+    annulus_aperture_1 = CircularAnnulus(positions_1, r_in=10., r_out=15.)
+    annulus_aperture_2 = CircularAnnulus(positions_2, r_in=10., r_out=15.)
+    
+    annulus_stats_1 = ApertureStats(data_1, annulus_aperture_1)
+    annulus_stats_2 = ApertureStats(data_2, annulus_aperture_2)
+
+    bkg_sum_1 = annulus_stats_1.median * aperture_1.area
+    bkg_sum_2 = annulus_stats_2.median * aperture_2.area
+
+    final_flux_1 = phot_table_1['aperture_sum'] - bkg_sum_1
+    final_flux_2 = phot_table_2['aperture_sum'] - bkg_sum_2
+    
+    # data is in photographic density units
+    flux_1 = abs(final_flux_1[0])
+    flux_2 = abs(final_flux_2[0])
+
+    f_1.close()
+    f_2.close()
+    
+    if flux_1 / flux_2 < par['false_positive_threshold']:
+        return True
+    
+    return False
+    
+    
 def update_dataset(key):
     '''
     Update the 'dataset.json' file with the name of the dataset to
@@ -69,7 +145,8 @@ def update_dataset(key):
 
 def fit_fwhm(data, *, xypos=None, fwhm=None, fit_shape=None, mask=None, error=None):
     '''
-    Overrides library function in order to return the complete PSFPhotometry object
+    Overrides photutils library function in order to 
+    return the complete PSFPhotometry object.
     '''
     with warnings.catch_warnings(record=True) as fit_warnings:
         phot = fit_2dgaussian(data, xypos=xypos, fwhm=fwhm, fix_fwhm=False,
@@ -160,7 +237,6 @@ def remove_outsiders(image, wcs, table, wcs_table=None, debug=False):
         print(np.any(mask))
         print(wcs)
         print(image.shape)
-
     
     return table[mask]
 
@@ -245,7 +321,6 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
         
         return ax
     
-
     fig_1 = plt.figure(figsize=figsize)
 
     ax_1 = _plot(fig_1, 1, cutout1, target_coords, title, invert_color, invert_north, invert_east, marker=marker_left)
@@ -255,7 +330,7 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
         ax_2 = _plot(fig_1, 2, cutout2, target_coords, title, invert_color, invert_north, invert_east, marker=marker_right)
     
     if title is not None:
-        fig_1.suptitle(str(title), horizontalalignment='left', x=0.05)
+        fig_1.suptitle(str(title), horizontalalignment='left', x=0.05, fontsize=11)
     
     plt.tight_layout()
     
@@ -264,7 +339,7 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
     
 def plot_profile(ax, profile, positions, sid, source_id, label_flag, title):
     '''
-    Code that is common to both plot types
+    Code that is common to both profile plotting types
     '''
     # normalize
     pr_max = np.max(profile)
@@ -403,6 +478,13 @@ def clean_bad_fits(table, par):
     return table_1
 
 
+def normalize_profile(profile):
+    pr_max = np.max(profile)
+    pr_min = np.min(profile)
+    result = (profile - pr_min) / (pr_max - pr_min)
+    return result
+
+
 def plot_analysis_results(table, table_matched, index, par, flux_range, edge_radii):
     '''
     Builds 4-pane plot with final analsyis results.
@@ -418,13 +500,14 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     '''
     # pick up one row in the non-matched table; extract info
     plate_id = table['plate_id_1'][index]
+    plate_id_2 = table['next_plate_id'][index]
     source_id = table['source_id'][index]
     ra  = table['ra_icrs'][index]
     dec = table['dec_icrs'][index]
     annular_bin = table['annular_bin_1'][index]
     target_flux_max = table['flux_max'][index] 
-    
-    # mid-exposure time and WCS from image header
+
+    # mid-exposure time, exptime, and WCS from image header
     header_1 = fits.getheader(fname(par['image1']))
     header_2 = fits.getheader(fname(par['image2']))
 
@@ -434,21 +517,22 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     time_event_1 = Time(time_stamp_1)
     time_stamp_2 = header_2['DATE-AVG']
     
+    exptime_1 = header_1['EXPTIME']
+    exptime_2 = header_2['EXPTIME']
+    
     # Earth's shadow
     es_1 = get_earth_shadow(ra, dec, time_event_1)
     formatted_es_1 = "{:.1f}".format(es_1[0])
     
-    # we need the plate ID of the second plate, to display it in the title string
-    table_2_name = par['table2']
-    plate_id_2 = table_2_name.split('_')[1].split('.')[0]
-
     # title
     title = "Plate ID: " + str(plate_id) + "   "
     title = title + "DATE-AVG: " + str(time_stamp_1) + "    " 
+    title = title + "EXPTIME: " + str(exptime_1) + " (s)   " 
     title = title + "Source ID: " + str(source_id) + "    " 
     title = title + "Annular Bin: " + str(annular_bin) + "    " + "\n"
     title = title + "Plate ID: " + str(plate_id_2) + "   "
     title = title + "DATE-AVG: " + str(time_stamp_2) + "    " 
+    title = title + "EXPTIME: " + str(exptime_2) + " (s)   " 
     title = title + "Earth's shadow: " + formatted_es_1 + " deg." 
     
     # Cutout around target is small so we can see the target structure.
@@ -464,9 +548,8 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
                 invert_east=par['invert_east'], invert_north=par['invert_north'])
     
     # cutout for neighborhood needs to be explicitly handled here
-    cutout_1, no_need = get_cutouts(fname(par['image1']), fname(par['image2']), 
-                                    target_coords, neighborhood_cutout_size)
-    
+    cutout_1, _no_need = get_cutouts(fname(par['image1']), fname(par['image2']), 
+                                     target_coords, neighborhood_cutout_size)
 
     # on the matched table, filter out rows that fall outside the neighborhood cutout footprint
     table_neighborhood = remove_outsiders(cutout_1.data, cutout_1.wcs, table_matched, wcs_table=wcs_1)
@@ -487,8 +570,8 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     fig_1, ax_1, ax_2 = plot_cutouts(cutout_1, None, coords, None, figsize=(10,5), marker_left='rx',
                                      invert_east=par['invert_east'], invert_north=par['invert_north'])
     
-    # to generate radial profiles, the pixel data must be inverted,
-    # and background must be subtracted
+    # to generate radial profiles, the pixel data (photographic density)
+    # must be inverted, and background must be subtracted
     cutout_1.data = 65535. - cutout_1.data
 
     sigma_clip = SigmaClip(sigma=3.)
@@ -499,13 +582,14 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     cutout_1.data = cutout_1.data - bkg_1.background  
 
     # fit PSFs to the selected neighborhood stars. Convert from px in the image to px in the cutout
-    fwhm_init = par['fwhm_init']
-    fit_shape = par['fit_shape']
     cutout_coords = cutout_1.wcs.world_to_pixel(coords)
     xypos = list(zip(cutout_coords[0], cutout_coords[1]))
-    fwhm_values_nomatch, phot_neighborhood = fit_fwhm(cutout_1.data, xypos=xypos, fwhm=fwhm_init, fit_shape=fit_shape)
+
+    fwhm_init = par['fwhm_init']
+    fit_shape = par['fit_shape']
+    _no_need, phot_neighborhood = fit_fwhm(cutout_1.data, xypos=xypos, fwhm=fwhm_init, fit_shape=fit_shape)
+
     table_neighborhood_psf = hstack([table_neighborhood, phot_neighborhood.results])
-    
     table_neighborhood_psf = clean_bad_fits(table_neighborhood_psf, par)
 
     # add target object to stars table. The radial profile plot routine requires that.
@@ -525,10 +609,10 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     plt.close()
     
 
-stat_pars = {'fwhm':     {'name': 'FWHM               ', 'column': 'fwhm_fit',     'flags': True},
-             'fwhmerr':  {'name': 'FWHM error      ',    'column': 'fwhm_err',     'flags': True},
-             'elong':    {'name': 'Elongation        ',  'column': 'elongation',   'flags': False},
-             'profdiff': {'name': 'RMS profile diff   ', 'column': 'profile_diff', 'flags': False},
+stat_pars = {'fwhm':      {'name': 'FWHM               ', 'column': 'fwhm_fit',     'flags': True},
+             'fwhmerr':   {'name': 'FWHM error      ',    'column': 'fwhm_err',     'flags': True},
+             'elong':     {'name': 'Elongation        ',  'column': 'elongation',   'flags': False},
+             'profdiff':  {'name': 'RMS profile diff   ', 'column': 'profile_diff', 'flags': False},
             }
 
 def build_stats_text(table_object, table_stars):
@@ -611,6 +695,50 @@ def get_earth_shadow(ra, dec, time_event):
             in_shadow = "not"
             
     return dist.to_value(u.deg)[0], in_shadow
+
+
+def extract_cutout_neighborhood(table_target, table_stars, image_data, image_wcs, 
+                                cutout_size, flux_range, row_index):
+    '''
+    Extracts an image cutout around a target position. Extracts a table with a list of
+    stars around that position, withinn the cutout boundaries.
+    
+    Parameters:
+    
+    table_target  - table with the target object
+    table_stars   - table with stars
+    image_data    - image bkg-subtracted pixel array
+    image_wcs     - image WCS
+    cutout_size   - cutout full size, arcmin
+    flux_range    - used to select stars around the peak flux of the target
+    row_index     - points to the row in table_target where the target is
+    
+    Return:
+    
+    cutout             - the Cutout2D instance
+    table_neighborhood - the table with stars inside the cutout 
+    '''
+    # get info from row
+    ra  = table_target['ra_icrs'][row_index]
+    dec = table_target['dec_icrs'][row_index]
+    target_flux_max = table_target['flux_max'][row_index]
+
+    # sky coords for the target object
+    target_coords = SkyCoord(ra=ra, dec=dec, unit='deg')
+
+    # extract cutout from input image, around the target celestial coordinates
+    cutout = Cutout2D(image_data, position=target_coords, size=cutout_size, wcs=image_wcs)
+
+    # on the stars table, filter out rows that fall outside the neighborhood cutout footprint
+    table_neighborhood = remove_outsiders(cutout.data, cutout.wcs, table_stars, wcs_table=image_wcs)
+
+    # filter out rows that have peak flux off by more than a given limit
+    mask = table_neighborhood['flux_max'] < (target_flux_max * (1. + flux_range))
+    table_neighborhood = table_neighborhood[mask]
+    mask = table_neighborhood['flux_max'] > (target_flux_max * (1. - flux_range))
+    table_neighborhood = table_neighborhood[mask]
+
+    return cutout, table_neighborhood
 
     
 class Worker:
@@ -730,7 +858,6 @@ class Worker:
         percent = int((float(self.ncount) / float(self.nrange)) * 100.) 
         if not i1 % 2000:
             print(self.name, " - ", str(percent)+'%', ". ", i1, self.table1['source_id'][i1], flush=True)
-
             
         return True
     
@@ -819,7 +946,7 @@ class FitWorker:
         Parameters:
 
         name       - id string for this worker
-        data       - numpy array with image
+        data       - numpy array with bkg-subtracted image
         table      - sources table with x,y positions to be fitted (px)
         index_init - initial value for the table index handled by this worker
         index_end  - final value for the table index handled by this worker
@@ -847,17 +974,14 @@ class FitWorker:
         
         self.xypos = list(zip(x_pos, y_pos))
         
-        print("Worker ", name, " - ", index_init, index_end, flush=True)
+        print("FitWorker ", name, " - ", index_init, index_end, flush=True)
         
     def __call__(self):
-
-        # this print is redundant with the supercalss' constructor print, but necessary
-        # when running the pipeline (the superclass' print doesn't output under the pipeline)
-#         print("Worker ", self.name, " - started. From row ", self.index_init, "to row", self.index_end, flush=True)
-
         # this is basically overriding the warnings setup in function fit_fwhm. We leave the warning
         # in the function for compatibility with the code it overrides.
         warnings.filterwarnings('ignore', category=AstropyUserWarning, message=".*One or more fit.*")
+
+        print("FitWorker ", self.name, " - started.", flush=True)
 
         # this function seems to not work efficiently under a parallelized environment. Perhaps it
         # puts a global lock on the data, somehow. 
@@ -865,9 +989,120 @@ class FitWorker:
         
         result = hstack([self.table, phot.results])
 
-        print("Worker ", self.name, " - ended.", flush=True)
+        print("FitWorker ", self.name, " - ended.", flush=True)
 
         return result
+    
+    
+class ProfileWorker:
+    '''
+    Class with callable instances that computes profile rms distance between
+    object and stars in the neighborhood
+
+    It provides the callable for the `Pool.apply_async` function, and also
+    holds all parameters necessary to perform the search.
+    '''
+    def __init__(self, name, table_nomatch, table_match, data, wcs, cutout_size, edge_radii, index_init, index_end):
+        '''
+        Parameters:
+
+        name          - id string for this worker
+        table_nomatch - table_psf_nonmatched
+        table_match   - table_psf_matched (full table, not the sampled version!)
+        data          - numpy 2D array with bkg-subtracted pixel data for entire image
+        wcs           - WCS of entire image
+        cutout_size   - size of (emtire side of) square cutout, in degrees
+        edge_radii    - radii where to compute profile
+        index_init    - initial value for the index at the outermost loop (i1)
+        index_end     - final value for the index at the outermost loop (i1)
+
+        Returns:
+
+        a subtable taken from the input nomatch table, augmented with the profile 
+        diff column. These subtables returned from each worker must be vstacked 
+        together by the caller, at the end of the multiprocess pool.  
+        '''
+        self.name = name
+        
+        self.t1 = table_nomatch[index_init:index_end].copy()
+        self.table_match = table_match
+
+        self.data = data
+        self.wcs = wcs
+        self.cutout_size = cutout_size
+        self.edge_radii = edge_radii
+
+        self.index_init = index_init
+        self.index_end  = index_end
+        
+        self.profile_diff_list = []
+        self.flux_range = 0.1
+
+        # to help reporting percentage already executed
+        self.ncount = 0
+        self.nrange = index_end - index_init
+        
+        print("ProfileWorker ", name, " - ", index_init, index_end, flush=True)
+
+    def __call__(self):
+        
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        
+        # better keep everything inside a try-except block to 
+        # facilitate debug: print statements tend to disappear
+        # inside the notebook server when running in multi-process
+        # mode
+        try:
+            for row_index in range(self.nrange):
+
+                self.ncount += 1
+
+                # get info from row
+                source_id_target = self.t1['source_id'][row_index]
+
+                # get the cutout and the stars in the neighborohhod    
+                cutout, table_neighborhood = extract_cutout_neighborhood(self.t1, self.table_match, 
+                                                                         self.data, self.wcs, 
+                                                                         self.cutout_size, self.flux_range, 
+                                                                         row_index)                
+                
+                # get the radial profile for target object in this row
+                rp_target = make_radial_profile(self.t1, source_id_target, cutout, self.wcs, self.edge_radii)
+                rp_target = normalize_profile(rp_target.profile)
+                
+                # build and store a radial profile for each star in this neighborhood
+                rps = []
+                for row_index_star in range(len(table_neighborhood)):
+                    source_id_star = table_neighborhood['source_id'][row_index_star]
+
+                    rp = make_radial_profile(table_neighborhood, source_id_star, cutout, self.wcs, self.edge_radii)
+
+                    rps.append(normalize_profile(rp.profile))
+
+                # profile difference
+                averaged_profile = np.mean(np.array(rps), axis=0)
+                diff = rp_target - averaged_profile
+
+                # weight diff by the profile itself, to enhance the higher snr region
+                diff = np.where(averaged_profile <= 0.15, 0.0, diff)
+                diff *= averaged_profile
+                diff[0:2] *= 0.0
+
+                # rms
+                rp_rms = np.sqrt(np.sum(np.square(diff)) / len(diff))
+                
+                self.profile_diff_list.append(rp_rms)
+
+                percent = int((float(self.ncount) / float(self.nrange)) * 100.) 
+                if not row_index % 100:
+                    print(self.name, " - ", str(percent)+'%', ".  ", row_index, flush=True)                
+
+            self.t1['profile_diff'] = self.profile_diff_list
+            
+        except Exception as e:
+            print(e)
+
+        return self.t1
 
 
 
