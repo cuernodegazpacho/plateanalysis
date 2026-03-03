@@ -9,7 +9,7 @@ archives as well.
 
 APPLAUSE provides not only the hi-res raw scans of plates, but also sextractor-built lists of 
 "sources" detected in each scan. These lists are the primary data used by the scripts. To enable
-these scripts to work with other archives, the main job would be then to create or adapt such
+these scripts to work with other archives, the main job would be to create or adapt such
 source lists to the format needed by the search/analysis algorithm.
 
 The notebooks break down the algorithm into manageable steps:
