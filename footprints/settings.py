@@ -5,6 +5,8 @@ import json
 DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 # DATAPATH = '/Volumes/backup/plateanalysis_data/footprints'
 
+CATALOG = 'footprints_5.csv'
+
 
 # To support pipleine mode, the current data set name is kept in a 
 # json file. To run scripts manually, edit this file to point to the
@@ -82,15 +84,15 @@ def get_parameters(key):
 
 parameters = {
     'default': {
-        'nproc': 8,                                # number of performance processors (Mac M1) - average tasks
-        'nproc_analysis': 8,                       # number of performance processors (Mac M1) - heavy tasks
+        'nproc': 8,                                # number of performance processors (Mac M1 16Gb) - average tasks
+        'nproc_analysis': 8,                       # number of performance processors (Mac M1 16Gb) - heavy tasks
         # sextractor criteria
         'sextractor_flags': 8,
         'model_prediction': 0.6,
         'elongation': 1.5,                         # less than
         'annular_bin': 5,                          # less or equals
         'flag_rim': 0,
-        # PSF analysis
+        # analysis
         'fwhm_init': 8.,
         'fit_shape': 31,
         'max_flux_threshold': 0.1,
@@ -100,11 +102,14 @@ parameters = {
         'qfit_max': 4.,
         'cfit_max': 0.003,
         'neighborhood_cutout_size': 7.0,          # full side of square, arcmin
+        'elongation_limit': 1.2,
+        'profile_diff_threshold': 0.05,           # 0.04 good, checked with false positives
+        'circularity_threshold': [75],            # about 30% on a 0-255 scale
+        'circularity_low_limit': 0.80, 
+        'tiny_cutout_size': 21,                   # for cicularity computation (px)
+        'false_positive_threshold': 10.,          # checked with false positives
         # display
         'display_cutout_size': 1.0,               # full side of square, arcmin
-        'profile_diff_threshold': 0.04,           # checked with false positives
-        'false_positive_threshold': 10.,          # checked with false positives
-        'elongation_limit': 1.2,
         'plot_limit': 100,
         'invert_east':  [False,False],
         'invert_north': [False,False],
@@ -161,50 +166,57 @@ parameters = {
     },
     # Grosser Schmidt-Spiegel
     '9245,9246': {
-        'nproc_analysis': 2,
+        'nproc_analysis': 3,
         'annular_bin': 9,
-        'min_acceptable_flux': 10000,
     },
     '9246,9247': {
-        'nproc_analysis': 2,
+        'nproc_analysis': 3,
         'annular_bin': 9,
-        'min_acceptable_flux': 10000,
+    },
+    '9341,9342': {
+        'max_flux_threshold': 0.03,
+    },
+    '9342,9343': {
+        'max_flux_threshold': 0.03,
+    },
+    '9474,9475': {
+        'nproc_analysis': 4,
+        'min_fwhm':  5.,
+        'max_fwhm': 10.,
     },
     '9533,9534': {
+        'nproc': 6,
         'nproc_analysis': 2,
         'annular_bin': 9,
-        'min_acceptable_flux': 8000,
-        'min_fwhm': 5.,
     },
     '9534,9535': {
+        'nproc': 6,
         'nproc_analysis': 2,
         'annular_bin': 9,
-        'min_acceptable_flux': 8500,
-        'min_fwhm': 5.,
     },
     '9538,9539': {
         'nproc_analysis': 2,
         'annular_bin': 9,
-        'min_acceptable_flux': 9000,
-        'min_fwhm': 5.,
     },
     '9539,9540': {
         'nproc_analysis': 2,
         'annular_bin': 9,
-        'min_acceptable_flux': 7500,
-        'min_fwhm': 5.,
     },
     '9545,9546': {
         'nproc_analysis': 2,
         'annular_bin': 9,
-        'min_acceptable_flux': 10000,
-        'min_fwhm': 5.,
     },
     '9546,9547': {
         'nproc_analysis': 2,
         'annular_bin': 9,
-        'min_acceptable_flux': 10000,
-        'min_fwhm': 5.,
+    },
+    '9550,9551': {
+        'nproc_analysis': 2,
+        'annular_bin': 9,
+    },
+    '9551,9552': {
+        'nproc_analysis': 2,
+        'annular_bin': 9,
     },
 }
 
@@ -224,14 +236,14 @@ parameters = {
 # proper temporal sequence.
 
 sequences = {
-    'seq00': [8794, 8795, 8796],                                # out-of-focus (but good for testing)
+#     'seq00': [8794, 8795, 8796],                                # out-of-focus (but good for testing)
     'seq01': [9245, 9246, 9247],
-    'seq03': [9313, 9315, 9317, 9318, 9319, 9320],              # candidate?
+    'seq03': [9313, 9315, 9317, 9318, 9319, 9320],      
     'seq04': [9322, 9323, 9324, 9325, 9326, 9327, 9328],
     'seq05': [9344, 9345, 9346, 9347, 9348, 9349, 9350],
     'seq06': [9341, 9342, 9343],
     'seq07': [9473, 9474, 9475],
-    'seq08': [9521, 9522, 9523],                                # comet - trailed
+#     'seq08': [9521, 9522, 9523],                                # comet - trailed
     'seq09': [9533, 9534, 9535],
     'seq10': [9538, 9539, 9540],
     'seq11': [9545, 9546, 9547],
@@ -240,7 +252,7 @@ sequences = {
 
 # use this variable to control the input of the pipeline notebooks.
 
-current_sequence = "seq09"
+current_sequence = "seq12"
     
     
         

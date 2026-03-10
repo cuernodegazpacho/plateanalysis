@@ -1,6 +1,8 @@
 import json
 import warnings
+import math
 
+import cv2
 import numpy as np
 
 from matplotlib.pyplot import imshow
@@ -126,8 +128,33 @@ def is_false_positive(table, row_index, par):
         return True
     
     return False
+
+
+def exceeds_criteria(table, row_index, par):
+    '''
+    Tests if a variety of thresholds are crossed.
     
+    Thresholds are either associated with sextractor-generated quantities, 
+    or result from conditions imposed by the results of PSF analysis. Other 
+    criteria were used when applause tables are ingested at the beginning, 
+    so the criteria in here act on top of whatever was already done to the 
+    primary input data.
+    '''    
+    if table['profile_diff'][row_index] > par['profile_diff_threshold']:
+        return True
+
+    if table['elongation'][row_index] > par['elongation_limit']:
+        return True
     
+    if table['circularity'][row_index] < par['circularity_low_limit']:
+        return True
+    
+    if is_false_positive(table, row_index, par):
+        return True
+
+    return False
+
+
 def update_dataset(key):
     '''
     Update the 'dataset.json' file with the name of the dataset to
@@ -602,17 +629,23 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     text = build_stats_text(table[index], table_neighborhood_psf)
     
     props = dict(boxstyle='square', facecolor='white', alpha=0.3)
-    ax.text(0.74, 0.60, text, multialignment='left', transform=ax.transAxes, fontsize=10,
+    ax.text(0.74, 0.55, text, multialignment='left', transform=ax.transAxes, fontsize=10,
             verticalalignment='center', horizontalalignment='center', bbox=props)
     
     plt.show()
     plt.close()
     
 
-stat_pars = {'fwhm':      {'name': 'FWHM               ', 'column': 'fwhm_fit',     'flags': True},
-             'fwhmerr':   {'name': 'FWHM error      ',    'column': 'fwhm_err',     'flags': True},
-             'elong':     {'name': 'Elongation        ',  'column': 'elongation',   'flags': False},
-             'profdiff':  {'name': 'RMS profile diff   ', 'column': 'profile_diff', 'flags': False},
+stat_pars = {'fwhm':      {'name': 'FWHM                 ',   'column': 'fwhm_fit',         'flags': True},
+             'fwhmerr':   {'name': 'FWHM error        ',      'column': 'fwhm_err',         'flags': True},
+             'elong':     {'name': 'Elongation          ',    'column': 'elongation',       'flags': False},
+             'profdiff':  {'name': 'RMS profile diff   ',     'column': 'profile_diff',     'flags': False},
+             'circular':  {'name': 'Circularity           ',  'column': 'circularity',      'flags': False},
+             'area':      {'name': 'Area                   ', 'column': 'area',             'flags': False},
+#              'solid':     {'name': 'Solidity              ', 'column': 'solidity',     'flags': False},
+#              'concave':   {'name': 'Concavity             ', 'column': 'concavity',    'flags': False},
+             'defect':    {'name': 'Shape defect       ',     'column': 'shape_defect',     'flags': False},
+             'circledev': {'name': 'RMS circle dev     ',     'column': 'circle_deviation', 'flags': False},
             }
 
 def build_stats_text(table_object, table_stars):
@@ -648,7 +681,7 @@ def build_stats_text(table_object, table_stars):
     text = text + "\nField stars   (avg - stdev)\n"
 
     try:
-        for key in list(stat_pars.keys()):
+        for i, key in enumerate(list(stat_pars.keys())):
 
             name = stat_pars[key]['name']
             value_stars_av = np.mean(table_stars[stat_pars[key]['column']])
@@ -657,14 +690,19 @@ def build_stats_text(table_object, table_stars):
             value_stars_av_string = f"{value_stars_av:5.2f}"
             value_stars_st_string = f"{value_stars_st:5.2f}"
             
-            text = text + name + " " + value_stars_av_string + " - " +  value_stars_st_string  + "\n"
+            # last line needs special treatment
+            suffix = "\n"
+            if i == len(list(stat_pars.keys()))-1:
+                suffix = ""
+            
+            text = text + name + " " + value_stars_av_string + " - " +  value_stars_st_string  + suffix
     except KeyError:
         pass
 
     return text
 
 
-def get_earth_shadow(ra, dec, time_event):
+def get_earth_shadow(ra, dec, time_event, longitude=10.242, latitude=53.482):
     '''
     Get angular distance from point on the sky, and center of Earth's shadow.
     
@@ -675,15 +713,13 @@ def get_earth_shadow(ra, dec, time_event):
     ra   -  coordinates
     dec  -
     time -  time
+    longitude, latitude - in deg. Defaults are for Hamburg Observatory.
     
     Return:
     
     - distance in degrees
     - boolean: True - is in shadow; False - is not in shadow
     '''
-    longitude = 10.242    # TODO: take this from main csv input file instead
-    latitude  = 53.482
-
     location = EarthLocation.from_geodetic(longitude, latitude, 0.0)
     es_radius = get_shadow_radius(orbit='GEO', geocentric_angle=False)
     
@@ -996,13 +1032,16 @@ class FitWorker:
     
 class ProfileWorker:
     '''
-    Class with callable instances that computes profile rms distance between
-    object and stars in the neighborhood
+    Class with callable instances that computes profile-associated diagnostics:
+     - rms profile distance between object and stars in the neighborhood;
+     - circularity
+     - solidity
 
     It provides the callable for the `Pool.apply_async` function, and also
     holds all parameters necessary to perform the search.
     '''
-    def __init__(self, name, table_nomatch, table_match, data, wcs, cutout_size, edge_radii, index_init, index_end):
+    def __init__(self, name, table_nomatch, table_match, data, wcs, cutout_size, edge_radii, 
+                 index_init, index_end, circularity_cutout=21, threshold=[21, 45]):
         '''
         Parameters:
 
@@ -1015,6 +1054,8 @@ class ProfileWorker:
         edge_radii    - radii where to compute profile
         index_init    - initial value for the index at the outermost loop (i1)
         index_end     - final value for the index at the outermost loop (i1)
+        circularity_cutout - box size for circularity computation
+        threshold     - list of threshold values for contour circularity computation (on a 0-255 scale)
 
         Returns:
 
@@ -1035,8 +1076,16 @@ class ProfileWorker:
         self.index_init = index_init
         self.index_end  = index_end
         
-        self.profile_diff_list = []
         self.flux_range = 0.1
+        self.profile_diff_list = []
+        self.circularity_list = []
+        self.solidity_list = []
+        self.concavity_list = []
+        self.max_defect_list = []
+        self.area_list = []
+        self.circle_deviation_list = []
+        self.threshold = threshold
+        self.circularity_cutout = circularity_cutout
 
         # to help reporting percentage already executed
         self.ncount = 0
@@ -1084,7 +1133,7 @@ class ProfileWorker:
                 diff = rp_target - averaged_profile
 
                 # weight diff by the profile itself, to enhance the higher snr region
-                diff = np.where(averaged_profile <= 0.15, 0.0, diff)
+                diff = np.where(averaged_profile <= 0.1, 0.0, diff)
                 diff *= averaged_profile
                 diff[0:2] *= 0.0
 
@@ -1092,12 +1141,104 @@ class ProfileWorker:
                 rp_rms = np.sqrt(np.sum(np.square(diff)) / len(diff))
                 
                 self.profile_diff_list.append(rp_rms)
+                
+                # circularity computation
+                circularity = 0.
+                area = 0.
+                solidity = 0.
+                concavity = 0.
+                max_defect = 0.
+                normalized_max_defect = 0.
+                circle_deviation = 0.
 
+                # use try-except to report errors in a parallelized notebook environment
+                try:
+                    # tiny cutout around object's image
+                    xpos = self.t1['x_fit'][row_index]
+                    ypos = self.t1['y_fit'][row_index]
+                    target_coords = (xpos, ypos)
+
+                    cutout_tiny = Cutout2D(self.data, position=target_coords, size=self.circularity_cutout)
+
+                    # normalize to range [0, 255] and convert to uint8
+                    image_float = cutout_tiny.data
+                    image_uint8 = np.empty(image_float.shape, dtype=np.uint8)
+
+                    cv2.normalize(image_float, image_uint8, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+
+                    # multiple thresholds and contours
+                    for t in self.threshold:
+                        _, thresh = cv2.threshold(image_uint8, t, 255, cv2.THRESH_BINARY)
+                        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                        # compute sum of defects over contours
+                        for i, contour in enumerate(contours):
+                            ar = cv2.contourArea(contour)
+                            perimeter = cv2.arcLength(contour, True)
+                            epsilon = 0.01 * perimeter
+                            approx_contour = cv2.approxPolyDP(contour, epsilon, True)
+                            hull = cv2.convexHull(approx_contour, returnPoints=False)
+#                             hull_area = cv2.contourArea(hull)
+
+                            if ar > 7. and perimeter > 0.:
+                                c = (4 * math.pi * ar) / (perimeter ** 2)
+
+                                circularity = c
+                                area = ar
+#                                 concavity = (hull_area - ar) / hull_area
+#                                 solidity = float(ar) / hull_area                                    
+
+                                # cummulative shape defect
+                                defects = cv2.convexityDefects(approx_contour, hull)
+                                if defects is not None:
+                                    sum_depth = 0.
+                                    for i in range(defects.shape[0]):
+                                        s, e, f, d = defects[i, 0]
+                                        depth = d / 256.0  # Real distance
+                                        sum_depth += depth
+
+#                                         if depth > max_defect:
+#                                             max_defect = depth
+#                                             normalized_max_defect = max_defect / max(w, h)
+                                    
+                                    x, y, w, h = cv2.boundingRect(approx_contour)
+                                    normalized_max_defect = sum_depth / max(w, h)
+            
+                                # rms distance to circle
+                                (x_c, y_c), radius = cv2.minEnclosingCircle(contour)
+                                distances = []
+                                for point in contour:
+                                    # Euclidean distance from each point to circle center, normalized
+                                    dist = np.sqrt((point[0][0] - x_c)**2 + (point[0][1] - y_c)**2)
+                                    dist = dist / radius
+                                    distances.append(dist)
+
+                                # A smaller standard deviation indicates a shape closer to a circle
+                                circle_deviation = np.std(distances)            
+                                    
+                except Exception as e:
+                    msg = str(e)
+                    if "(-5:Bad argument) The convex hull indices" not in msg:
+                        print(e)
+                
+                self.circularity_list.append(circularity)                
+                self.area_list.append(area)                
+#                 self.solidity_list.append(solidity)                
+#                 self.concavity_list.append(concavity)  
+                self.max_defect_list.append(normalized_max_defect)
+                self.circle_deviation_list.append(circle_deviation)
+                
                 percent = int((float(self.ncount) / float(self.nrange)) * 100.) 
                 if not row_index % 100:
                     print(self.name, " - ", str(percent)+'%', ".  ", row_index, flush=True)                
 
             self.t1['profile_diff'] = self.profile_diff_list
+            self.t1['circularity']  = self.circularity_list
+            self.t1['area']  = self.area_list
+#             self.t1['solidity']  = self.solidity_list
+#             self.t1['concavity'] = self.concavity_list
+            self.t1['shape_defect'] = self.max_defect_list
+            self.t1['circle_deviation'] = self.circle_deviation_list
             
         except Exception as e:
             print(e)
