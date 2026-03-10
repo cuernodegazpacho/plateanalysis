@@ -32,7 +32,13 @@ The notebooks break down the algorithm into manageable steps:
 
 Most of the work can be performed by a pipeline (batch mode). The bottleneck is obviously 
 the manual vetting step. We hope that a better statistical analysis will eventually lead to an
-almost fully automatic pipeline.
+almost fully automated pipeline.
 
+--------------
 
+### Acknowledgement
 
+Funding for APPLAUSE has been provided by DFG (German Research Foundation, Grant ), Leibniz 
+Institute for Astrophysics Potsdam (AIP), Dr. Remeis Sternwarte Bamberg (University 
+Nuernberg/Erlangen), the Hamburger Sternwarte (University of Hamburg) 
+and Tartu Observatory.
