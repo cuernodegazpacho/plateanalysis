@@ -136,7 +136,7 @@ def exceeds_criteria(table, row_index, par):
     
     Thresholds are either associated with sextractor-generated quantities, 
     or result from conditions imposed by the results of PSF analysis. Other 
-    criteria were used when applause tables are ingested at the beginning, 
+    criteria were used when applause tables were ingested at the beginning, 
     so the criteria in here act on top of whatever was already done to the 
     primary input data.
     '''    
@@ -172,7 +172,7 @@ def update_dataset(key):
 
 def fit_fwhm(data, *, xypos=None, fwhm=None, fit_shape=None, mask=None, error=None):
     '''
-    Overrides photutils library function in order to 
+    Overrides photutils library function of same name in order to 
     return the complete PSFPhotometry object.
     '''
     with warnings.catch_warnings(record=True) as fit_warnings:
@@ -237,6 +237,32 @@ def make_sky_coords(table, wcs):
     result = SkyCoord(ra=ras, dec=decs, frame='icrs')
 
     return result
+
+
+def get_pixel_coords(table, source_id, cutout, wcs_original):
+    '''
+    Gets pixel coordinates for a source on a cutout.
+    
+    Parameters:
+
+    table        - table with source data
+    source_id    - the source ID that identifies the table row
+    cutout       - image cutout
+    wcs_original - the WCS of the original image where the cutout was taken from
+    
+    Returns:
+    
+    x,y coordinates in pixels
+    '''
+    # get 1-row table with desired source
+    mask = table['source_id'] == source_id
+    t1 = table[mask]
+
+    # compute pixel coords in cutout 
+    sky_coord = make_sky_coords(t1, wcs_original)
+    cutout_coords = cutout.wcs.world_to_pixel(sky_coord)
+
+    return cutout_coords[0][0], cutout_coords[1][0]
 
 
 def remove_outsiders(image, wcs, table, wcs_table=None, debug=False):
@@ -383,32 +409,6 @@ def plot_profile(ax, profile, positions, sid, source_id, label_flag, title):
     ax.legend()
     
     return label_flag
-
-
-def get_pixel_coords(table, source_id, cutout, wcs_original):
-    '''
-    Gets pixel coordinates for a source on a cutout.
-    
-    Parameters:
-
-    table        - table with source data
-    source_id    - the source ID that identifies the table row
-    cutout       - image cutout
-    wcs_original - the WCS of the original image where the cutout was taken from
-    
-    Returns:
-    
-    x,y coordinates in pixels
-    '''
-    # get 1-row table with desired source
-    mask = table['source_id'] == source_id
-    t1 = table[mask]
-
-    # compute pixel coords in cutout 
-    sky_coord = make_sky_coords(t1, wcs_original)
-    cutout_coords = cutout.wcs.world_to_pixel(sky_coord)
-
-    return cutout_coords[0][0], cutout_coords[1][0]
 
 
 def make_radial_profile(table, source_id, cutout, wcs_original, edge_radii):
@@ -948,14 +948,14 @@ class Worker2(Worker):
                         
     def __call__(self):
         
-        # External loop scans the entire table.
+        # External loop scans the entire range of rows.
 
         for i1 in range(self.index_init, self.index_end):
             
             self.ncount += 1
                 
             # Internal loop scans only what wasn't scanned yet.
-            # No lunger used; kept in here for reference only.
+            # No longer used; kept in here for reference only.
 
 #             for i2 in range(i1+1, len(self.table2)):
 #                 if self.matched(i1, i2):
@@ -1020,7 +1020,7 @@ class FitWorker:
         print("FitWorker ", self.name, " - started.", flush=True)
 
         # this function seems to not work efficiently under a parallelized environment. Perhaps it
-        # puts a global lock on the data, somehow. 
+        # puts locks on the data, somehow. 
         fwhm_values, phot = fit_fwhm(self.data, xypos=self.xypos, fwhm=self.fwhm, fit_shape=self.fit_shape)
         
         result = hstack([self.table, phot.results])
@@ -1035,7 +1035,11 @@ class ProfileWorker:
     Class with callable instances that computes profile-associated diagnostics:
      - rms profile distance between object and stars in the neighborhood;
      - circularity
+     - area
      - solidity
+     - concavity
+     - shape deviation
+     - circle deviation
 
     It provides the callable for the `Pool.apply_async` function, and also
     holds all parameters necessary to perform the search.

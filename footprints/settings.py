@@ -6,6 +6,7 @@ DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 # DATAPATH = '/Volumes/backup/plateanalysis_data/footprints'
 
 CATALOG = 'footprints_5.csv'
+RESULTS = "./results/"
 
 
 # To support pipleine mode, the current data set name is kept in a 
@@ -125,7 +126,6 @@ parameters = {
     },
     '16643,16646': {
         'sextractor_flags': 8,
-        'annular_bin': 8,
         'elongation': 1.5,
         'model_prediction': 0.5,
         'annular_bin': 1,
@@ -252,7 +252,7 @@ sequences = {
 
 # use this variable to control the input of the pipeline notebooks.
 
-current_sequence = "seq12"
+current_sequence = "seq05"
     
     
         
