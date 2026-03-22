@@ -9,19 +9,19 @@ CATALOG = 'footprints_5.csv'
 RESULTS = "./results/"
 
 
-# To support pipleine mode, the current data set name is kept in a 
-# json file. To run scripts manually, edit this file to point to the
-# desired plate pair (careful with editing, JSON files have finicky
-# syntax). The pipeline overwrites this file.
+# To support pipleine mode, the current data set and sequence names
+# are kept in a json file. To run scripts manually, edit this file 
+# to point to the desired plate pair (careful with editing, JSON 
+# files have finicky syntax). The pipeline overwrites this file.
 
-dataset_json = 'dataset.json'
-
+dataset_json = 'dataset.json'    
 try:
-    json_file = open(dataset_json, 'r')
-    dataset_dict = json.load(json_file)
-    current_dataset = dataset_dict['current_dataset']
+    with open(dataset_json, 'r', encoding='utf-8-sig') as json_file:
+        dataset_dict = json.load(json_file)
+        current_dataset  = dataset_dict['current_dataset']
+        current_sequence = dataset_dict['current_sequence']
 except FileNotFoundError:
-    print(f"Error: File {images_json} was not found.")
+    print(f"Error: File {dataset_json} was not found.")
 except json.JSONDecodeError as e:
     print(f"JSON Error: {e}")
     
@@ -86,32 +86,33 @@ def get_parameters(key):
 parameters = {
     'default': {
         'nproc': 8,                                # number of performance processors (Mac M1 16Gb) - average tasks
-        'nproc_analysis': 8,                       # number of performance processors (Mac M1 16Gb) - heavy tasks
+        'nproc_analysis': 3,                       # number of performance processors (Mac M1 16Gb) - heavy tasks
         # sextractor criteria
         'sextractor_flags': 8,
         'model_prediction': 0.6,
         'elongation': 1.5,                         # less than
-        'annular_bin': 5,                          # less or equals
+        'annular_bin': 9,                          # less or equals
         'flag_rim': 0,
         # analysis
         'fwhm_init': 8.,
         'fit_shape': 31,
         'max_flux_threshold': 0.1,
         'min_acceptable_flux': 500,
-        'min_fwhm':  4.,
+        'min_fwhm':  3.,
         'max_fwhm': 15.,
-        'qfit_max': 4.,
+        'qfit_max': 2.5,
         'cfit_max': 0.003,
-        'neighborhood_cutout_size': 7.0,          # full side of square, arcmin
+        'neighborhood_cutout_size': 8.0,          # full side of square, arcmin
         'elongation_limit': 1.2,
         'profile_diff_threshold': 0.05,           # 0.04 good, checked with false positives
-        'circularity_threshold': [75],            # about 30% on a 0-255 scale
+        'circularity_threshold': [70],            # about 28% on a 0-255 scale
         'circularity_low_limit': 0.80, 
         'tiny_cutout_size': 21,                   # for cicularity computation (px)
         'false_positive_threshold': 10.,          # checked with false positives
         # display
-        'display_cutout_size': 1.0,               # full side of square, arcmin
+        'display_cutout_size': 1.5,               # full side of square, arcmin
         'plot_limit': 100,
+        'rotate': [False,False],                  # rotate *before* flipping - NOT IMPLEMENTED YET
         'invert_east':  [False,False],
         'invert_north': [False,False],
     },
@@ -165,58 +166,56 @@ parameters = {
         'max_fwhm': 9.,
     },
     # Grosser Schmidt-Spiegel
-    '9245,9246': {
-        'nproc_analysis': 3,
-        'annular_bin': 9,
-    },
-    '9246,9247': {
-        'nproc_analysis': 3,
-        'annular_bin': 9,
-    },
     '9341,9342': {
+        'nproc_analysis': 6,
         'max_flux_threshold': 0.03,
+        'annular_bin': 5,
     },
     '9342,9343': {
+        'nproc_analysis': 6,
         'max_flux_threshold': 0.03,
+        'annular_bin': 5,
     },
     '9474,9475': {
         'nproc_analysis': 4,
         'min_fwhm':  5.,
         'max_fwhm': 10.,
+        'annular_bin': 5,
     },
-    '9533,9534': {
-        'nproc': 6,
-        'nproc_analysis': 2,
-        'annular_bin': 9,
+    '9039,9040': {
+        'rotate': [False,True],      # 2nd plate has to be reprojected for display
     },
-    '9534,9535': {
-        'nproc': 6,
-        'nproc_analysis': 2,
-        'annular_bin': 9,
+    '9012,9013': {
+        'display_cutout_size': 7.0,        # full side of square, arcmin
+        'neighborhood_cutout_size': 15.0,  # full side of square, arcmin
     },
-    '9538,9539': {
-        'nproc_analysis': 2,
-        'annular_bin': 9,
+    '9095,9096': {
+        'annular_bin': 7,                  # 9096 looks dirty and underexposed
+        'display_cutout_size': 4.0,       
+        'neighborhood_cutout_size': 15.0, 
     },
-    '9539,9540': {
-        'nproc_analysis': 2,
-        'annular_bin': 9,
+    '9099,9100': {
+        'annular_bin': 7,                 
+        'display_cutout_size': 4.0,       
+        'neighborhood_cutout_size': 15.0, 
     },
-    '9545,9546': {
-        'nproc_analysis': 2,
-        'annular_bin': 9,
+    '9337,9338': {
+        'annular_bin': 6,                  # focus
+        'display_cutout_size': 4.0,       
+        'neighborhood_cutout_size': 15.0, 
     },
-    '9546,9547': {
-        'nproc_analysis': 2,
-        'annular_bin': 9,
+    '9352,9353': {
+        'annular_bin': 6,                  # focus
+        'display_cutout_size': 4.0,       
+        'neighborhood_cutout_size': 15.0, 
     },
-    '9550,9551': {
-        'nproc_analysis': 2,
-        'annular_bin': 9,
+    '9355,9356': {                         # 9356 partially blocked by shutter
+        'annular_bin': 6,                  # focus
+        'display_cutout_size': 4.0,       
+        'neighborhood_cutout_size': 15.0, 
     },
-    '9551,9552': {
-        'nproc_analysis': 2,
-        'annular_bin': 9,
+    '9528,9529': {
+        'annular_bin': 8,
     },
 }
 
@@ -248,12 +247,37 @@ sequences = {
     'seq10': [9538, 9539, 9540],
     'seq11': [9545, 9546, 9547],
     'seq12': [9550, 9551, 9552],
+# two-plate sequences that overlap by more than 50% in area.
+    'seq13': [8874, 8875],
+#     'seq14': [9039, 9040],    # 9040 is Y only, rotated AND flipped
+    'seq15': [9012, 9013],
+    'seq16': [9016, 9017],
+    'seq17': [9095, 9096],
+    'seq18': [9099, 9100],
+#     'seq19': [9167, 9168, 9169],   # out-of-order
+    'seq20': [9168, 9169],
+    'seq21': [9174, 9175],
+    'seq22': [9176, 9177],
+    'seq23': [9228, 9229],
+    'seq24': [9233, 9234],
+    'seq25': [9305, 9306],
+    'seq26': [9285, 9286],
+    'seq27': [9337, 9338],
+    'seq28': [9352, 9353],
+    'seq29': [9355, 9356],
+#     'seq30': [9469, 9472],    # comet Arend-Roland   Ha + GG5
+#     'seq31': [9482, 9484],    # comet Arend-Roland   Kodak OaO
+#     'seq32': [9488, 9489, 9490, 9491],     # comet Arend-Roland   Kodak OaO
+#     'seq33': [9525, 9526],     # comet Arend-Roland partial tail
+    'seq34': [9528, 9529],
+#     'seq35': [9536, 9537],   # comet Arend-Roland   Kodak OaO
+#     'seq36': [9543, 9544],   # comet Arend-Roland   Kodak OaO
+    'seq37': [9548, 9549],
+    'seq38': [9555, 9556],
+    'seq39': [9557, 9558],     # coordinates a bit off?
+#     'seq40': [9596, 9597],     # comet Mrkos Ha+GG5, OaO (?)
 }
 
-# use this variable to control the input of the pipeline notebooks.
-
-current_sequence = "seq05"
-    
     
         
     
