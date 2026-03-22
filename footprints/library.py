@@ -8,10 +8,12 @@ import numpy as np
 from matplotlib.pyplot import imshow
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
 from astropy import units as u
 from astropy.io import fits
 from astropy.wcs import WCS
+from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy.table import Table, join, hstack, vstack
 from astropy.time import Time
 from astropy.nddata.utils import Cutout2D
@@ -19,6 +21,7 @@ from astropy.coordinates import SkyCoord, ICRS, EarthLocation
 from astropy.nddata import NoOverlapError
 from astropy.stats import SigmaClip
 from astropy.utils.exceptions import AstropyUserWarning
+from reproject import reproject_interp 
 
 from erfa import ErfaWarning
 from earthshadow import get_shadow_center, get_shadow_radius, dist_from_shadow_center
@@ -160,12 +163,26 @@ def update_dataset(key):
     Update the 'dataset.json' file with the name of the dataset to
     be used next as a dict key by the pipeline code
     '''
-
-    dataset_dict = {"current_dataset": key}
-
     try:
-        json_file = open('dataset.json', 'w')
-        json.dump(dataset_dict, json_file, indent=4)
+        with open('dataset.json', 'r', encoding='utf-8-sig') as json_file:
+            dataset_dict = json.load(json_file)
+        dataset_dict['current_dataset'] = key
+        with open('dataset.json', 'w', encoding='utf-8-sig') as json_file:
+            json.dump(dataset_dict, json_file, indent=4)
+    except IOError as e:
+        print(f"Error writing to file: {e}")
+
+
+def update_sequence(seq_key):
+    '''
+    Same as above, but for the sequence
+    '''
+    try:
+        with open('dataset.json', 'r', encoding='utf-8-sig') as json_file:
+            dataset_dict = json.load(json_file)
+        dataset_dict['current_sequence'] = seq_key
+        with open('dataset.json', 'w', encoding='utf-8-sig') as json_file:
+            json.dump(dataset_dict, json_file, indent=4)
     except IOError as e:
         print(f"Error writing to file: {e}")
 
@@ -239,6 +256,50 @@ def make_sky_coords(table, wcs):
     return result
 
 
+def rotate_cutout(cutout, angle=90.):
+    '''
+    Rotates a cutout so N is at top
+    
+    NOT WORKING AT THE MOMENT
+    '''
+    wcs = cutout.wcs
+    new_wcs = wcs.deepcopy() 
+    angle_rad = np.radians(angle)
+    cutout_size = cutout.data.shape
+
+    naxis1 = cutout.data.shape[0] 
+    naxis2 = cutout.data.shape[1] 
+    center_x, center_y = naxis1 / 2, naxis2 / 2
+
+    # sky coords at cutout center
+    center_coord = wcs.pixel_to_world(center_x, center_y)
+    
+    # new WCS has reference coordinates at center pixel
+    new_wcs = WCS(naxis=2)
+    new_wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN'] 
+    new_wcs.wcs.crpix = [center_x, center_y]
+    new_wcs.wcs.crval = [center_coord.ra.deg, center_coord.dec.deg]
+    
+    # Negative CDELT1 for right ascension convention
+    new_pixel_scale_0 = abs(wcs.wcs.cd[0][0])
+    new_pixel_scale_1 = abs(wcs.wcs.cd[1][1])
+#     new_wcs.wcs.cdelt = [ -new_pixel_scale.to(u.deg).value, new_pixel_scale.to(u.deg).value ] 
+    new_wcs.wcs.cdelt = [ -new_pixel_scale_0, new_pixel_scale_1 ] 
+
+    # Set the rotation to 0 in the WCS header to ensure alignment
+    new_header = new_wcs.to_header()
+    new_header['ORIENTAT'] = 0.0 
+
+    # Reproject the original data onto the new header's WCS
+    rotated_cutout_data, footprint = reproject_interp(
+        (cutout.data, wcs),
+        new_header,
+        shape_out=cutout_size
+    )
+    
+    return rotated_cutout_data, new_wcs
+
+
 def get_pixel_coords(table, source_id, cutout, wcs_original):
     '''
     Gets pixel coordinates for a source on a cutout.
@@ -265,7 +326,7 @@ def get_pixel_coords(table, source_id, cutout, wcs_original):
     return cutout_coords[0][0], cutout_coords[1][0]
 
 
-def remove_outsiders(image, wcs, table, wcs_table=None, debug=False):
+def remove_outsiders(image_array, wcs, table, wcs_table=None, debug=False):
     '''
     Checks a set of coordinates against an image file to see if any
     coordinates fall outside the image's footprint.
@@ -281,7 +342,7 @@ def remove_outsiders(image, wcs, table, wcs_table=None, debug=False):
 
     coords = make_sky_coords(table, wcs_t)
         
-    mask = coords.contained_by(wcs, image=image)
+    mask = coords.contained_by(wcs, image=image_array)
 
     if debug:
         print(len(coords))
@@ -289,13 +350,91 @@ def remove_outsiders(image, wcs, table, wcs_table=None, debug=False):
         print(mask)
         print(np.any(mask))
         print(wcs)
-        print(image.shape)
+        print(image_array.shape)
     
     return table[mask]
 
 
+def plot_psf_analysis(table_list, par_set):
+    '''
+    Plots results of PSF analysis.
+    
+    The function expects a list with table names. One or two tables 
+    are supported at the moment.
+    
+    The function is sensitive to the annular_bin sextractor
+    parameter. It discriminates two regions, inner and outer,
+    relative to the annular_bin parameter in the parameters
+    dict.
+
+    Parameters:
+
+    table_list - list with table(s) to be plotted
+    par_set    - parameters for this data set, defined in settings.py 
+    
+    Returns:
+    
+    fig -  the matplotlib/pyplot *figure* object
+    '''    
+    col_names = ['fwhm_fit', 'elongation', 'qfit', 'cfit']
+    colors = [['lightblue', 'black'], 
+              [mcolors.CSS4_COLORS['violet'], 'red']]
+    labels = [['Match - outer rings', 'Match - inner rings'], 
+              ['No match - outer rings', 'No match - inner rings']]
+    sizes = [[4, 1], 
+             [5, 5]]
+    
+    annular_bin = par_set['annular_bin']
+    
+    ylims = (
+        (0., 30.),       # fwhm
+        (0.9, 1.55),     # elong
+        (-0.2, 4.),      # qfit
+        (-0.005, 0.005)  # cfit
+    )
+
+    fig = plt.figure(figsize=(10, 8))
+
+    for subplot_index, col in enumerate(col_names):
+
+        ax = fig.add_subplot(2, 2, subplot_index+1)
+        
+        for index, table in enumerate(table_list):
+        
+            # segregate by ring regions. The inner ring
+            # is half way in of the outer ring.
+            for ab in [0, 1]:
+                mask = table['annular_bin_1'] <= (annular_bin / (ab+1))
+                t1 = table[mask]
+            
+                x1 = t1['flux_max']
+                y1 = t1[col]
+
+                color = colors[index][ab]
+                label = labels[index][ab]
+                size  = sizes[index][ab]
+
+                ax.scatter(x1, y1, label=label, color=color, s=size)
+            
+            ax.set_ylim(bottom=ylims[subplot_index][0], top=ylims[subplot_index][1])
+            
+            ax.set_xlabel('Peak flux')
+            ax.set_ylabel(col)
+            ax.set_title(col + ' distribution')
+            ax.legend()
+
+        plt.grid()
+
+    plt.tight_layout()
+    plt.show()
+    
+    # this is in case we need PDF output
+    return fig
+
+
 def plot_images(file1, file2, target_coords, size, title, invert_color=False, 
-                figsize=(10, 5), invert_north=[False,False], invert_east=[False,False]):
+                figsize=(10, 5), invert_north=[False,False], invert_east=[False,False],
+                rotate=[False,False]):
     '''
     Function that plots side-by-side image cutouts coming from two files. 
     The cutouts are aligned via celestial coordinates.
@@ -311,20 +450,26 @@ def plot_images(file1, file2, target_coords, size, title, invert_color=False,
     figsize       - plot size
     invert_north  - True if the plot should be flipped N-S
     invert_east   - True if the plot should be flipped E-W
+    rotate        - True if image has to be rotate 90 deg. clockwise BEFORE flipping
     '''    
     cutout1, cutout2 = get_cutouts(file1, file2, target_coords, size)
 
     fig1, ax1, ax2 = plot_cutouts(cutout1, cutout2, target_coords, title, marker_right='rx',
                                   invert_color=invert_color, figsize=figsize, 
-                                  invert_north=invert_north, invert_east=invert_east)
+                                  invert_north=invert_north, invert_east=invert_east,
+                                  rotate=rotate)
     
         
 def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
                  figsize=(10, 5), marker_left="None", marker_right="None",
-                 invert_north=[False, False], invert_east=[False, False]):
+                 invert_north=[False, False], invert_east=[False, False],
+                 rotate=[False, False]):
     '''
     Function that plots side-by-side image cutouts. The cutouts are aligned
-    via celestial coordinates.
+    via celestial coordinates. They can be flipped in X and Y, and/or reprojected
+    into the N-top, E-left convention. Note that both operations can be 
+    requested via the invert_xx and rotate flags, and reproject will be
+    applyied first.
 
     Parameters:
 
@@ -336,6 +481,7 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
     figsize       - plot size
     invert_north  - True if the plot should be flipped N-S
     invert_east   - True if the plot should be flipped E-W
+    rotate        - if True, reprojects to N-top, E-left convention, *before* flipping
     marker_left   - marker to be used on the left plot
     marker_right  - marker to be used on the right plot
     
@@ -345,11 +491,18 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
     ax_1, ax_2    - Axis objects for each one of the plots (ax_2 can be None) 
     '''    
     def _plot(figure, index, cutout, target_coords, title, invert_color, 
-              invert_north, invert_east, marker="None"):
+              invert_north, invert_east, rotate, marker="None"):
 
         cw = cutout.wcs
         pixdata = cutout.data
-        print("cutout shape:", cutout.data.shape, "px")
+
+        # rotation is applyied before flipping. Usually flipping won't
+        # be needed because rotation actually reproject to standard 
+        # N-top, E-left convention
+        if rotate[index-1]:
+            pixdata, cw = rotate_cutout(cutout)
+        
+        print("cutout shape:", pixdata.shape, "px")
 
         color_map = cm.gray
         if invert_color:
@@ -359,13 +512,9 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
 
         image = ax.imshow(pixdata, origin='lower', cmap=color_map)
 
-        if invert_north[0]:
+        if invert_north[index-1]:
             ax.invert_yaxis()
-        if invert_east[0]:
-            ax.invert_xaxis()
-        if invert_north[1]:
-            ax.invert_yaxis()
-        if invert_east[1]:
+        if invert_east[index-1]:
             ax.invert_xaxis()
 
         ax.plot(target_coords.ra.deg, target_coords.dec.deg, marker, transform=ax.get_transform('world'))
@@ -376,11 +525,13 @@ def plot_cutouts(cutout1, cutout2, target_coords, title, invert_color=False,
     
     fig_1 = plt.figure(figsize=figsize)
 
-    ax_1 = _plot(fig_1, 1, cutout1, target_coords, title, invert_color, invert_north, invert_east, marker=marker_left)
+    ax_1 = _plot(fig_1, 1, cutout1, target_coords, title, invert_color, invert_north, invert_east, rotate, 
+                 marker=marker_left)
     
     ax_2 = None
     if cutout2 is not None:
-        ax_2 = _plot(fig_1, 2, cutout2, target_coords, title, invert_color, invert_north, invert_east, marker=marker_right)
+        ax_2 = _plot(fig_1, 2, cutout2, target_coords, title, invert_color, invert_north, invert_east, rotate, 
+                     marker=marker_right)
     
     if title is not None:
         fig_1.suptitle(str(title), horizontalalignment='left', x=0.05, fontsize=11)
@@ -572,7 +723,7 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
 
     # plot cutouts around target, for both images
     plot_images(fname(par['image1']), fname(par['image2']), target_coords, target_cutout_size, title, 
-                invert_east=par['invert_east'], invert_north=par['invert_north'])
+                invert_east=par['invert_east'], invert_north=par['invert_north'], rotate=par['rotate'])
     
     # cutout for neighborhood needs to be explicitly handled here
     cutout_1, _no_need = get_cutouts(fname(par['image1']), fname(par['image2']), 
@@ -595,7 +746,8 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     coords = make_sky_coords(table_neighborhood, wcs_1)
 
     fig_1, ax_1, ax_2 = plot_cutouts(cutout_1, None, coords, None, figsize=(10,5), marker_left='rx',
-                                     invert_east=par['invert_east'], invert_north=par['invert_north'])
+                                     invert_east=par['invert_east'], invert_north=par['invert_north'],
+                                     rotate=par['rotate'])
     
     # to generate radial profiles, the pixel data (photographic density)
     # must be inverted, and background must be subtracted
