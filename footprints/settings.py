@@ -33,7 +33,6 @@ images_json = 'images.json'
 try:
     json_file = open(images_json, 'r')
     images = json.load(json_file)
-
 except FileNotFoundError:
     print(f"Error: File {images_json} was not found.")
 except json.JSONDecodeError as e:
@@ -68,6 +67,7 @@ def get_parameters(key):
     par['table1_calib'] = get_table_sources(plate1, calib=True)
     par['table2_calib'] = get_table_sources(plate2, calib=True)
     par['table_matched'] = 'table_match_' + plate1 + '_' + plate2 + '.fits'
+    par['table_psf_matched'] = 'table_psf_match_' + plate1 + '_' + plate2 + '.fits'
     par['table_non_matched'] = 'table_nomatch_' + plate1 + '_' + plate2 + '.fits'
     par['table_psf_nonmatched'] = get_table_psf_nomatch(plate1, plate2)
     par['table_candidates'] = 'table_candidates_' + plate1 + '_' + plate2 + '.fits'
@@ -90,7 +90,7 @@ parameters = {
         # sextractor criteria
         'sextractor_flags': 8,
         'model_prediction': 0.6,
-        'elongation': 1.5,                         # less than
+        'elongation': 1.15,                        # less than
         'annular_bin': 9,                          # less or equals
         'flag_rim': 0,
         # analysis
@@ -103,14 +103,14 @@ parameters = {
         'qfit_max': 2.5,
         'cfit_max': 0.003,
         'neighborhood_cutout_size': 8.0,          # full side of square, arcmin
-        'elongation_limit': 1.2,
+        'elongation_limit': 1.10,
         'profile_diff_threshold': 0.05,           # 0.04 good, checked with false positives
         'circularity_threshold': [70],            # about 28% on a 0-255 scale
         'circularity_low_limit': 0.80, 
         'tiny_cutout_size': 21,                   # for cicularity computation (px)
         'false_positive_threshold': 10.,          # checked with false positives
         # display
-        'display_cutout_size': 1.5,               # full side of square, arcmin
+        'display_cutout_size': 2.5,                # full side of square, arcmin
         'plot_limit': 100,
         'rotate': [False,False],                  # rotate *before* flipping - NOT IMPLEMENTED YET
         'invert_east':  [False,False],
@@ -183,35 +183,29 @@ parameters = {
         'annular_bin': 5,
     },
     '9039,9040': {
-        'rotate': [False,True],      # 2nd plate has to be reprojected for display
+        'rotate': [False,True],            # 2nd plate has to be reprojected for display
     },
     '9012,9013': {
-        'display_cutout_size': 7.0,        # full side of square, arcmin
         'neighborhood_cutout_size': 15.0,  # full side of square, arcmin
     },
     '9095,9096': {
         'annular_bin': 7,                  # 9096 looks dirty and underexposed
-        'display_cutout_size': 4.0,       
         'neighborhood_cutout_size': 15.0, 
     },
     '9099,9100': {
         'annular_bin': 7,                 
-        'display_cutout_size': 4.0,       
         'neighborhood_cutout_size': 15.0, 
     },
     '9337,9338': {
         'annular_bin': 6,                  # focus
-        'display_cutout_size': 4.0,       
         'neighborhood_cutout_size': 15.0, 
     },
     '9352,9353': {
         'annular_bin': 6,                  # focus
-        'display_cutout_size': 4.0,       
         'neighborhood_cutout_size': 15.0, 
     },
     '9355,9356': {                         # 9356 partially blocked by shutter
         'annular_bin': 6,                  # focus
-        'display_cutout_size': 4.0,       
         'neighborhood_cutout_size': 15.0, 
     },
     '9528,9529': {
@@ -231,8 +225,8 @@ parameters = {
 # BEWARE that the plate ID sequence number may not necessarily 
 # corresponds with the time sequence. Script footprint_analysis.ipynb 
 # may not yet be correctly sorting then by time. Manual editing of the 
-# lists below may still be needed in order to place plate IDs in the 
-# proper temporal sequence.
+# lists in each sequence below may still be needed in order to place 
+# plate IDs in the proper temporal sequence.
 
 sequences = {
 #     'seq00': [8794, 8795, 8796],                                # out-of-focus (but good for testing)
@@ -278,7 +272,14 @@ sequences = {
 #     'seq40': [9596, 9597],     # comet Mrkos Ha+GG5, OaO (?)
 }
 
-    
+# 79 usable plates in total, 50 with "next plate" to enable searching
+
+
+
+
+
+
+
         
     
     
