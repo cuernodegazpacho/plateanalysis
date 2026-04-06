@@ -435,7 +435,7 @@ def plot_psf_analysis(table_list, par_set, title=None,
     
     ylims = (
         (0., 20.),       # fwhm
-        (0.9, 1.20),     # elong
+        (0.97, 1.20),    # elong
         (-0.2, 2.5),     # qfit
         (-0.004, 0.004)  # cfit
     )
@@ -809,7 +809,7 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     title = title + "DATE-AVG: " + str(time_stamp_2) + "    " 
     title = title + "EXPTIME: " + str(exptime_2) + " (s)   " 
     title = title + "Earth's shadow: " + formatted_es_1 + " deg." + "\n" 
-    title = title + "File: " + par['image1'] + "    " 
+    title = title + "Files: " + par['image1'] + "  " + par['image2'] 
     title = title + "Pixel coords: " + formatted_x_source + ", " + formatted_y_source 
     
     # Cutout around target is small so we can see the target structure.

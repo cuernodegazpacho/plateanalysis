@@ -5,7 +5,7 @@ import json
 DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 # DATAPATH = '/Volumes/backup/plateanalysis_data/footprints'
 
-CATALOG = 'footprints_5.csv'
+CATALOG = 'footprints_6.csv'
 RESULTS = "./results/"
 
 
@@ -86,12 +86,12 @@ def get_parameters(key):
 parameters = {
     'default': {
         'nproc': 8,                                # number of performance processors (Mac M1 16Gb) - average tasks
-        'nproc_analysis': 3,                       # number of performance processors (Mac M1 16Gb) - heavy tasks
+        'nproc_analysis': 4,                       # number of performance processors (Mac M1 16Gb) - heavy tasks
         # sextractor criteria
-        'sextractor_flags': 8,
+        'sextractor_flags': 4,
         'model_prediction': 0.6,
         'elongation': 1.15,                        # less than
-        'annular_bin': 9,                          # less or equals
+        'annular_bin': 8,                          # less or equals
         'flag_rim': 0,
         # analysis
         'fwhm_init': 8.,
@@ -166,6 +166,9 @@ parameters = {
         'max_fwhm': 9.,
     },
     # Grosser Schmidt-Spiegel
+    '8739,8741': {
+        'annular_bin': 4,
+    },
     '9341,9342': {
         'nproc_analysis': 6,
         'max_flux_threshold': 0.03,
@@ -185,8 +188,24 @@ parameters = {
     '9039,9040': {
         'rotate': [False,True],            # 2nd plate has to be reprojected for display
     },
+    '9039,9012': {
+        'neighborhood_cutout_size': 15.0,  
+    },
     '9012,9013': {
-        'neighborhood_cutout_size': 15.0,  # full side of square, arcmin
+        'neighborhood_cutout_size': 15.0,  
+    },
+    '9013,9014': {
+        'neighborhood_cutout_size': 15.0,  
+        'display_cutout_size': 7.5,  
+    },
+    '9089,9112': {
+        'annular_bin': 6,
+        'neighborhood_cutout_size': 18.0,  
+    },
+    '9112,9099': {
+        'annular_bin': 6,
+        'neighborhood_cutout_size': 45.0,
+#         'display_cutout_size': 15.,
     },
     '9095,9096': {
         'annular_bin': 7,                  # 9096 looks dirty and underexposed
@@ -208,9 +227,6 @@ parameters = {
         'annular_bin': 6,                  # focus
         'neighborhood_cutout_size': 15.0, 
     },
-    '9528,9529': {
-        'annular_bin': 8,
-    },
 }
 
 
@@ -218,15 +234,9 @@ parameters = {
 # by script footprint_analysis.ipynb (it has to be manually copied and
 # pasted from the output of that script, in here). 
 # 
-# This dict is for telescope Grosser Schmidt-Spiegel and includes only 
-# at least 3 plates taken on the same night, and overlapping more than 
+# This dict is for telescope Grosser Schmidt-Spiegel and includes two
+# or more plates taken on the same night, and overlapping more than 
 # 50% in area.
-
-# BEWARE that the plate ID sequence number may not necessarily 
-# corresponds with the time sequence. Script footprint_analysis.ipynb 
-# may not yet be correctly sorting then by time. Manual editing of the 
-# lists in each sequence below may still be needed in order to place 
-# plate IDs in the proper temporal sequence.
 
 sequences = {
 #     'seq00': [8794, 8795, 8796],                                # out-of-focus (but good for testing)
@@ -272,7 +282,55 @@ sequences = {
 #     'seq40': [9596, 9597],     # comet Mrkos Ha+GG5, OaO (?)
 }
 
-# 79 usable plates in total, 50 with "next plate" to enable searching
+# usable sequences above comprise 77 usable plates in total, 49 with "next plate" to enable searching
+
+
+# This dict below is also for telescope Grosser Schmidt-Spiegel. It includes
+# two or more plates taken on separate nights, with up to 10 nights difference
+# between dates. Plate areas overlapping by more than 50%.
+
+# sequences = {
+# #     'seq41': [9012, 9013, 9014, 9039, 9040],  # 9040 is Y only; 9012-9013 already done; 9039 is first
+# #     'seq41': [9039, 9012, 9013, 9014],    # 2nd attempt - 9014 underexposed - contamination with weak stars
+#     'seq42': [9089, 9112, 9099, 9100],      # March 28 - Apr 07, 1956
+# #     'seq43': [9307, 9311, 9312, 9282, 9285, 9286],
+# #     'seq44': [9313, 9315, 9317, 9318, 9319, 9320, 9316, 9322, 9323, 9324, 9325, 9327, 9321],
+# #     'seq45': [9316, 9322, 9323, 9324, 9325, 9327, 9321],
+# #     'seq46': [9322, 9323, 9324, 9325, 9321],
+# #     'seq47': [9352, 9353, 9355, 9356],
+# #     'seq48': [9486, 9488, 9489, 9493],
+# #     'seq49': [9488, 9489, 9490, 9491, 9492, 9493],
+# #     'seq50': [9525, 9526, 9531, 9536, 9537, 9543, 9544],
+# #     'seq51': [9528, 9529, 9553, 9555, 9556],
+# #     'seq52': [9531, 9536, 9537, 9543, 9544],
+# #     'seq53': [9533, 9534, 9535, 9545, 9546, 9547],
+# #     'seq54': [9536, 9537, 9543, 9544],
+# #     'seq55': [9542, 9548, 9549, 9557, 9558],
+# #     'seq56': [9545, 9546, 9547, 9550, 9551, 9552],
+# #     'seq57': [9548, 9549, 9557, 9558], 
+# # #     # two-plate sequences
+# #     'seq58': [8739, 8741],                      # Earth shadow 8 deg - plates are too dirty
+# #     'seq59': [8820, 8847],
+# #     'seq60': [8840, 8845],
+# #     'seq61': [8886, 8893],
+# #     'seq62': [8910, 8915],
+# #     'seq63': [9010, 9042],
+# #     'seq64': [9011, 9043],
+# #     'seq65': [9012, 9013, 9014],                # partial repeat  
+# #     'seq66': [9112, 9099, 9100],
+# #     'seq67': [9182, 9188],
+# #     'seq68': [9185, 9187],
+# #     'seq69': [9248, 9249],
+# #     'seq70': [9381, 9388],
+# #     'seq71': [9388, 9404],
+# #     'seq72': [9480, 9482, 9484],
+# #     'seq73': [9482, 9484, 9485],
+# #     'seq74': [9553, 9555, 9556],
+# }
+
+
+
+
 
 
 
