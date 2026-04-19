@@ -6,6 +6,7 @@ DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 # DATAPATH = '/Volumes/backup/plateanalysis_data/footprints'
 
 CATALOG = 'footprints_6.csv'
+# CATALOG = 'footprints_1958.csv'
 RESULTS = "./results/"
 
 
@@ -79,9 +80,8 @@ def get_parameters(key):
 
 
 # Parameters that may require fine tuning, specific to each dataset.
-# The defaults are, for now,  more appropriate to the longer sequences
-# of the Grosser Schmidt-Spiegel datasets, since we are focussing on 
-# that telescope in particular. 
+# The defaults are, for now,  more appropriate to the Grosser Schmidt-Spiegel 
+# datasets, since we are focussing on that telescope in particular. 
 
 parameters = {
     'default': {
@@ -196,7 +196,7 @@ parameters = {
     },
     '9013,9014': {
         'neighborhood_cutout_size': 15.0,  
-        'display_cutout_size': 7.5,  
+        'display_cutout_size': 2.5,  
     },
     '9089,9112': {
         'annular_bin': 6,
@@ -205,16 +205,35 @@ parameters = {
     '9112,9099': {
         'annular_bin': 6,
         'neighborhood_cutout_size': 45.0,
-#         'display_cutout_size': 15.,
     },
     '9095,9096': {
-        'annular_bin': 7,                  # 9096 looks dirty and underexposed
+        'annular_bin': 7,                  # 9096 looks underexposed
         'neighborhood_cutout_size': 15.0, 
     },
     '9099,9100': {
         'annular_bin': 7,                 
         'neighborhood_cutout_size': 15.0, 
     },
+#     '9100,9099': {                          # exotic objects
+#         'sextractor_flags': 8,
+#         'model_prediction': 0.1,
+#         'elongation': 4.0,
+#         'fwhm_init': 10.,
+#         'fit_shape': 37,
+#         'max_flux_threshold': 0.02,
+#         'min_acceptable_flux': 200,
+#         'min_fwhm':  2.,
+#         'max_fwhm': 45.,
+#         'qfit_max': 15.,
+#         'cfit_max': 0.1,
+#         'profile_diff_threshold': 0.5,     
+#         'circularity_threshold': [70],      
+#         'circularity_low_limit': 0.20, 
+#         'tiny_cutout_size': 31,              
+#         'false_positive_threshold': 5.,      
+#         'elongation_limit': 2.,
+#         'neighborhood_cutout_size': 15.0, 
+#     },
     '9337,9338': {
         'annular_bin': 6,                  # focus
         'neighborhood_cutout_size': 15.0, 
@@ -227,6 +246,37 @@ parameters = {
         'annular_bin': 6,                  # focus
         'neighborhood_cutout_size': 15.0, 
     },
+    '9307,9311': {                         # guiding
+        'elongation': 1.25,
+        'elongation_limit': 1.15,
+    },
+    '9311,9312': {                         # guiding
+        'elongation': 1.25,
+        'elongation_limit': 1.15,
+    },
+    '9312,9282': {                         # guiding
+        'elongation': 1.25,
+        'elongation_limit': 1.15,
+    },
+    '9282,9285': {                         # guiding
+        'elongation': 1.25,
+        'elongation_limit': 1.15,
+    },
+    '8820,8847': {                         # guiding
+        'elongation': 1.25,
+        'elongation_limit': 1.15,
+        'neighborhood_cutout_size': 30.0, 
+    },
+    '8840,8845': {
+        'neighborhood_cutout_size': 15.0,  
+    },
+    '9011,9043': {
+        'neighborhood_cutout_size': 15.0,  
+        'display_cutout_size': 2.0,
+    },
+    '9381,9388': {
+        'neighborhood_cutout_size': 20.0,  
+    },
 }
 
 
@@ -237,6 +287,8 @@ parameters = {
 # This dict is for telescope Grosser Schmidt-Spiegel and includes two
 # or more plates taken on the same night, and overlapping more than 
 # 50% in area.
+
+# sequences below comprise 77 usable plates in total, 49 with "next plate" to enable searching
 
 sequences = {
 #     'seq00': [8794, 8795, 8796],                                # out-of-focus (but good for testing)
@@ -258,6 +310,7 @@ sequences = {
     'seq16': [9016, 9017],
     'seq17': [9095, 9096],
     'seq18': [9099, 9100],
+#     'seq18a': [9100, 9099],          # lots of super-bright objects in 9100 - artifacts mostly
 #     'seq19': [9167, 9168, 9169],   # out-of-order
     'seq20': [9168, 9169],
     'seq21': [9174, 9175],
@@ -280,53 +333,57 @@ sequences = {
     'seq38': [9555, 9556],
     'seq39': [9557, 9558],     # coordinates a bit off?
 #     'seq40': [9596, 9597],     # comet Mrkos Ha+GG5, OaO (?)
-}
-
-# usable sequences above comprise 77 usable plates in total, 49 with "next plate" to enable searching
-
-
+# }
+# #
+# #
+# #
 # This dict below is also for telescope Grosser Schmidt-Spiegel. It includes
 # two or more plates taken on separate nights, with up to 10 nights difference
 # between dates. Plate areas overlapping by more than 50%.
-
+#     
+# sequences below comprise 30 usable plates in total, 17 with "next plate" to enable searching
+#     
+#
 # sequences = {
-# #     'seq41': [9012, 9013, 9014, 9039, 9040],  # 9040 is Y only; 9012-9013 already done; 9039 is first
-# #     'seq41': [9039, 9012, 9013, 9014],    # 2nd attempt - 9014 underexposed - contamination with weak stars
-#     'seq42': [9089, 9112, 9099, 9100],      # March 28 - Apr 07, 1956
-# #     'seq43': [9307, 9311, 9312, 9282, 9285, 9286],
-# #     'seq44': [9313, 9315, 9317, 9318, 9319, 9320, 9316, 9322, 9323, 9324, 9325, 9327, 9321],
-# #     'seq45': [9316, 9322, 9323, 9324, 9325, 9327, 9321],
-# #     'seq46': [9322, 9323, 9324, 9325, 9321],
-# #     'seq47': [9352, 9353, 9355, 9356],
-# #     'seq48': [9486, 9488, 9489, 9493],
-# #     'seq49': [9488, 9489, 9490, 9491, 9492, 9493],
-# #     'seq50': [9525, 9526, 9531, 9536, 9537, 9543, 9544],
-# #     'seq51': [9528, 9529, 9553, 9555, 9556],
-# #     'seq52': [9531, 9536, 9537, 9543, 9544],
-# #     'seq53': [9533, 9534, 9535, 9545, 9546, 9547],
-# #     'seq54': [9536, 9537, 9543, 9544],
-# #     'seq55': [9542, 9548, 9549, 9557, 9558],
-# #     'seq56': [9545, 9546, 9547, 9550, 9551, 9552],
-# #     'seq57': [9548, 9549, 9557, 9558], 
-# # #     # two-plate sequences
-# #     'seq58': [8739, 8741],                      # Earth shadow 8 deg - plates are too dirty
-# #     'seq59': [8820, 8847],
-# #     'seq60': [8840, 8845],
-# #     'seq61': [8886, 8893],
-# #     'seq62': [8910, 8915],
-# #     'seq63': [9010, 9042],
-# #     'seq64': [9011, 9043],
-# #     'seq65': [9012, 9013, 9014],                # partial repeat  
-# #     'seq66': [9112, 9099, 9100],
-# #     'seq67': [9182, 9188],
-# #     'seq68': [9185, 9187],
-# #     'seq69': [9248, 9249],
-# #     'seq70': [9381, 9388],
-# #     'seq71': [9388, 9404],
-# #     'seq72': [9480, 9482, 9484],
-# #     'seq73': [9482, 9484, 9485],
-# #     'seq74': [9553, 9555, 9556],
-# }
+#     'seq41': [9012, 9013, 9014, 9039, 9040],  # 9040 is Y only; 9012-9013 already done; 9039 is first
+#     'seq41': [9039, 9012, 9013, 9014],        # 2nd attempt - 9014 underexposed - contamination with weak stars
+    'seq42': [9089, 9112, 9099],                # March 28 - Apr 07, 1956
+    'seq43': [9307, 9311, 9312, 9282, 9285, 9286],
+#     'seq44': [9313, 9315, 9317, 9318, 9319, 9320, 9316, 9322, 9323, 9324, 9325, 9327, 9321], # repeat from seqs 03 and 04
+#     'seq45': [9316, 9322, 9323, 9324, 9325, 9327, 9321],                                     # ditto
+#     'seq46': [9322, 9323, 9324, 9325, 9321],                                                 # ditto
+#     'seq47': [9352, 9353, 9355, 9356],                                                       # seq28 + seq29
+#     'seq48': [9486, 9488, 9489, 9493],                                                       # comet 
+#     'seq49': [9488, 9489, 9490, 9491, 9492, 9493],                                           # comet
+#     'seq50': [9525, 9526, 9531, 9536, 9537, 9543, 9544],                                     # comet
+#     'seq51': [9528, 9529, 9553, 9555, 9556],                   # partial with seq 34 and 38
+#     'seq51': [9529, 9553, 9555],                               # non-overlapping FOVs: 60+ stars out of frame
+#     'seq52': [9531, 9536, 9537, 9543, 9544],                   # comet
+#     'seq53': [9533, 9534, 9535, 9545, 9546, 9547],             # seq09 + seq11
+#     'seq54': [9536, 9537, 9543, 9544],                         # comet
+#     'seq55': [9542, 9548, 9549, 9557, 9558],                   # seq37 + seq39
+    'seq55': [9542, 9548],                                       # removed seq37 + seq39
+#     'seq56': [9545, 9546, 9547, 9550, 9551, 9552],             # seq11 + seq12
+#     'seq57': [9548, 9549, 9557, 9558],                         # seq37 + seq39
+# #     # two-plate sequences
+#     'seq58': [8739, 8741],                      # Earth shadow 8 deg - plates are too dirty
+    'seq59': [8820, 8847],
+    'seq60': [8840, 8845],
+#     'seq61': [8886, 8893],                      # 8886 has no WCS
+#     'seq62': [8910, 8915],                      # 8910 IR emulsion, 8915 blue emulsion, 8915 bad WCS - false positives
+    'seq63': [9010, 9042],
+    'seq64': [9011, 9043],
+#     'seq65': [9012, 9013, 9014],                # partial repeat with seq15 - seq41 9014 underexposed
+#     'seq66': [9112, 9099, 9100],                # repeat with seq42
+    'seq67': [9182, 9188],
+    'seq68': [9185, 9187],
+    'seq69': [9248, 9249],
+    'seq70': [9381, 9388],
+    'seq71': [9388, 9404],
+#     'seq72': [9480, 9482, 9484],                # comet
+#     'seq73': [9482, 9484, 9485],                # comet
+#     'seq74': [9553, 9555, 9556],                # comet Mrkos 
+}
 
 
 
