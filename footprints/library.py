@@ -260,14 +260,14 @@ def get_cutouts(file1, file2, target_coords, size):
     file1         - image file for the first image 
     file2         - image file for the second image, or None
     target_coords - the SkyCoord instance with the center coordinates of the cutouts
-    size          - size of the (square) cutout, in degrees
+    size          - size of the (square) cutout (in units of u * deg)
     '''
     def _get_cutout(file_name, target_coords, size):
         f = fits.open(file_name)
 
         w = WCS(f[0].header)
         data = f[0].data
-
+        
         try:
             cutout = Cutout2D(data, position=target_coords, size=size, wcs=w)
         except NoOverlapError as e:
@@ -419,7 +419,7 @@ def plot_psf_analysis(table_list, par_set, title=None,
     Parameters:
 
     table_list - list with table(s) to be plotted
-    par_set    - parameters for this data set, defined in settings.py 
+    par_set    - parameters for this data set, defined in settings.py
     labels     - to label plot points of different origins
     sizes      - sizes of plot points of different origins
     
@@ -456,7 +456,7 @@ def plot_psf_analysis(table_list, par_set, title=None,
             
                 x1 = t1['flux_max']
                 y1 = t1[col]
-
+                
                 color = colors[index][ab]
                 label = labels[index][ab]
                 size  = sizes[index][ab]
@@ -810,7 +810,7 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     title = title + "EXPTIME: " + str(exptime_2) + " (s)   " 
     title = title + "Earth's shadow: " + formatted_es_1 + " deg." + "\n" 
     title = title + "Files: " + par['image1'] + "  " + par['image2'] 
-    title = title + "Pixel coords: " + formatted_x_source + ", " + formatted_y_source 
+    title = title + "  Pixel coords: " + formatted_x_source + ", " + formatted_y_source 
     
     # Cutout around target is small so we can see the target structure.
     # Neighborhood cutout picks up more stars for radial profile comparison
@@ -1065,6 +1065,12 @@ def plot_cutout_series(plates, table, images, target_id, frames_per_row=8, figsi
             # get transient coordinates and other info
             m = table['source_id'] == sid
             t = table[m]
+
+            # handle case were the same source ID shows up more than once in the table. This
+            # is caused by duplication within sequences.
+            if (len(t)) > 1:
+                t = t[[0]]
+            
             ra  = t['ra_icrs']
             dec = t['dec_icrs']
             target_coords = SkyCoord(ra=ra, dec=dec, unit='deg')
