@@ -434,10 +434,10 @@ def plot_psf_analysis(table_list, par_set, title=None,
     annular_bin = par_set['annular_bin']
     
     ylims = (
-        (0., 20.),       # fwhm
-        (0.97, 1.20),    # elong
-        (-0.2, 2.5),     # qfit
-        (-0.004, 0.004)  # cfit
+        (0., par_set['fwhm_lim']),          # fwhm
+        (0.97, par_set['disp_elong_lim']),  # elong
+        (-0.2, 2.5),                        # qfit
+        (-0.004, 0.004)                     # cfit
     )
 
     fig = plt.figure(figsize=(10, 8))
@@ -732,7 +732,7 @@ def clean_bad_fits(table, par):
     table_1 = table.copy()
     
     # we don't want any flagged fits
-    mask = table_1['flags'] == 0
+    mask = table_1['flags'] <= par['max_fit_flag']
     table_1 = table_1[mask]
 
     # quality of fit: zero means a perfectly fitted Gaussian
@@ -1370,8 +1370,9 @@ class FitWorker:
     
 class ProfileWorker:
     '''
-    Class with callable instances that computes profile-associated diagnostics:
+    Class with callable instances that computes profile-associated and Gaussian diagnostics:
      - rms profile distance between object and stars in the neighborhood;
+     - mean, median, and stddev of reference stars in the neighborhood
      - circularity
      - area
      - solidity
@@ -1383,7 +1384,8 @@ class ProfileWorker:
     holds all parameters necessary to perform the search.
     '''
     def __init__(self, name, table_nomatch, table_match, data, wcs, cutout_size, edge_radii, 
-                 index_init, index_end, circularity_cutout=21, threshold=[21, 45]):
+                 index_init, index_end, fwhm_init, fit_shape, 
+                 circularity_cutout=21, threshold=[21, 45]):
         '''
         Parameters:
 
@@ -1396,6 +1398,8 @@ class ProfileWorker:
         edge_radii    - radii where to compute profile
         index_init    - initial value for the index at the outermost loop (i1)
         index_end     - final value for the index at the outermost loop (i1)
+        fwhm_init     - initial value for fitting Gaussians on neighborhhod stars
+        fit_shape     - size of square region around neighborhood stars
         circularity_cutout - box size for circularity computation
         threshold     - list of threshold values for contour circularity computation (on a 0-255 scale)
 
@@ -1414,12 +1418,18 @@ class ProfileWorker:
         self.wcs = wcs
         self.cutout_size = cutout_size
         self.edge_radii = edge_radii
+        self.fwhm_init = fwhm_init
+        self.fit_shape = fit_shape
 
         self.index_init = index_init
         self.index_end  = index_end
         
         self.flux_range = 0.1
         self.profile_diff_list = []
+        self.fwhm_median_list = []
+        self.fwhm_mean_list = []
+        self.fwhm_stddev_list = []
+        self.neighbor_stars_list = []
         self.circularity_list = []
         self.solidity_list = []
         self.concavity_list = []
@@ -1451,11 +1461,27 @@ class ProfileWorker:
                 # get info from row
                 source_id_target = self.t1['source_id'][row_index]
 
-                # get the cutout and the stars in the neighborohhod    
+                # get the cutout and the stars in the neighborhood    
                 cutout, table_neighborhood = extract_cutout_neighborhood(self.t1, self.table_match, 
                                                                          self.data, self.wcs, 
                                                                          self.cutout_size, self.flux_range, 
-                                                                         row_index)                
+                                                                         row_index)   
+
+#                 # compute FWHM stats from stars in the neighborhood - STILL NOT WORKING
+#                 coords = make_sky_coords(table_neighborhood, self.wcs)
+#                 cutout_coords = cutout.wcs.world_to_pixel(coords)
+#                 xypos = list(zip(cutout_coords[0], cutout_coords[1]))
+                
+#                 fwhm_values, phot = fit_fwhm(self.data, xypos=xypos, fwhm=self.fwhm_init, fit_shape=self.fit_shape)
+                
+#                 fwhm_median = np.median(fwhm_values)
+#                 fwhm_mean = np.mean(fwhm_values)
+#                 fwhm_stddev = np.std(fwhm_values)
+                
+#                 self.neighbor_stars_list.append(len(xypos))
+#                 self.fwhm_median_list.append(fwhm_median)
+#                 self.fwhm_mean_list.append(fwhm_mean)
+#                 self.fwhm_stddev_list.append(fwhm_stddev)
                 
                 # get the radial profile for target object in this row
                 rp_target = make_radial_profile(self.t1, source_id_target, cutout, self.wcs, self.edge_radii)
@@ -1574,6 +1600,10 @@ class ProfileWorker:
                 if not row_index % 100:
                     print(self.name, " - ", str(percent)+'%', ".  ", row_index, flush=True)                
 
+#             self.t1['fwhm_neighbors_median'] = self.fwhm_median_list
+#             self.t1['fwhm_neighbors_mean'] = self.fwhm_mean_list
+#             self.t1['fwhm_neighbors_stddev'] = self.fwhm_stddev_list
+#             self.t1['n_neighbors'] = self.neighbor_stars_list
             self.t1['profile_diff'] = self.profile_diff_list
             self.t1['circularity']  = self.circularity_list
             self.t1['area']  = self.area_list
