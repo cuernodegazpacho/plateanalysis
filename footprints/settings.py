@@ -4,26 +4,37 @@ import json
 
 # uncomment the imports appropriate for the telescope to be analysed
 
-# Grosser Schmidt-Spiegel datasets
-from import_GS import sequences as sequences
-from import_GS import parameters as parameters
-tel_suffix = "GS"
+# # Grosser Schmidt-Spiegel datasets
+# from import_GS import sequences as sequences
+# from import_GS import parameters as parameters
+# tel_suffix = "GS"
 
-# 1m-Spiegelteleskop datasets
+# # Great Schmidt Camera  datasets
+# from import_GSC import sequences as sequences
+# from import_GSC import parameters as parameters
+# tel_suffix = "GSC"
+
+# Doppel-Reflektor datasets
+from import_DR import sequences as sequences
+from import_DR import parameters as parameters
+tel_suffix = "DR"
+
+# # 1m-Spiegelteleskop datasets
 # from import_ST import sequences as sequences
 # from import_ST import parameters as parameters
 # tel_suffix = "ST"
 
-# Doppel-Reflektor datasets
-# from import_DR import sequences as sequences
-# from import_DR import parameters as parameters
-# tel_suffix = "DR"
-
+telescope_names = {
+    'GS':  'Grosser Schmidt-Spiegel',       # 0.91 arcsec/px
+    'GSC': 'Great Schmidt Camera',          # 1.29
+    'ST':  '1m-Spiegelteleskop',
+    'DR':  'Doppel-Reflektor',              # 0.73
+}
 
 DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 # DATAPATH = '/Volumes/backup/plateanalysis_data/footprints'
 
-CATALOG = 'footprints_6.csv'
+CATALOG = 'footprints_8.csv'
 # CATALOG = 'footprints_1958.csv'
 RESULTS = "./results/"
 
