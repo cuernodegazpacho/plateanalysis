@@ -646,7 +646,7 @@ def plot_profile(ax, profile, positions, sid, source_id, label_flag, title):
 
     ax.plot(positions, profile, label=label, color=color, linewidth=linewidth)
 
-    ax.set_xlabel("Position (pix)")
+    ax.set_xlabel("Radius (pix)")
     ax.set_ylabel("Profile")
     ax.set_title(title)
     ax.legend()
