@@ -9,6 +9,7 @@ parameters = {
         'nproc': 8,                                # number of performance processors (Mac M1 16Gb) - average tasks
         'nproc_analysis': 4,                       # number of performance processors (Mac M1 16Gb) - heavy tasks
         # sextractor and catalog criteria
+        'find_mismatches': True,                  # run find_mismatches?
         'use_catalog': True,                      # use Gaia IDs for filtering
         'sextractor_flags': 4,
         'model_prediction': 0.6,
@@ -18,64 +19,62 @@ parameters = {
         'max_flux_threshold': 0.1,
         # analysis
         'fwhm_init': 8.,
-        'fit_shape': 31,
+        'fit_shape': 33,
         'min_acceptable_flux': 500,
-        'min_fwhm':  3.,
-        'max_fwhm': 15.,
+        'min_fwhm':  4.5,                         # this is below the 8 px threshold for 95% confidence rejection!
+        'max_fwhm': 20.,
         'qfit_max': 2.5,
-        'cfit_max': 0.003,
-        'max_fit_flag': 0,
-        'neighborhood_cutout_size': 8.0,          # full side of square, arcmin
+        'cfit_max': 0.004,
+        'max_fit_flag': 4,
+        'neighborhood_cutout_size': 18.0,         # full side of square, arcmin
         'elongation_limit': 1.10,
         'profile_diff_threshold': 0.05,           # 0.04 good, checked with false positives
         'circularity_threshold': [70],            # about 28% on a 0-255 scale
         'circularity_low_limit': 0.80, 
-        'tiny_cutout_size': 21,                   # for cicularity computation (px)
+        'shape_defect_limit': 0.10,
+        'circle_deviation_limit': 0.10,
+        'shape_defect_limit_small_area': 0.50,
+        'circle_deviation_limit_small_area': 0.50,
+        'tiny_cutout_size': 25,                   # for cicularity computation (px)
         'false_positive_threshold': 10.,          # checked with false positives
         # display
-        'fwhm_lim': 20., 
+        'display_active': True,
+        'fwhm_lim': 22., 
         'disp_elong_lim': 1.2,
         'display_cutout_size': 2.5,                # full side of square, arcmin
-        'plot_limit': 100,
+        'plot_limit': 500,
         'rotate': [False,False],                  # rotate *before* flipping - NOT IMPLEMENTED YET
         'invert_east':  [False,False],
         'invert_north': [False,False],
     },
+    '9315,9317': {
+        'annular_bin': 4,                          # out of focus
+    },
+    '9316,9322': {
+         'use_catalog': False,   
+    },
     '8739,8741': {
-        'annular_bin': 4,
+        'annular_bin': 6,
     },
     '9341,9342': {
         'nproc_analysis': 6,
         'max_flux_threshold': 0.03,
-        'annular_bin': 5,
+        'annular_bin': 6,
     },
     '9342,9343': {
         'nproc_analysis': 6,
         'max_flux_threshold': 0.03,
-        'annular_bin': 5,
+        'annular_bin': 6,
     },
     '9474,9475': {
         'nproc_analysis': 4,
-        'min_fwhm':  5.,
-        'max_fwhm': 10.,
-        'annular_bin': 5,
+        'annular_bin': 6,
     },
     '9039,9040': {
         'rotate': [False,True],            # 2nd plate has to be reprojected for display
     },
-    '9039,9012': {
-        'neighborhood_cutout_size': 15.0,  
-    },
-    '9012,9013': {
-        'neighborhood_cutout_size': 15.0,  
-    },
-    '9013,9014': {
-        'neighborhood_cutout_size': 15.0,  
-        'display_cutout_size': 2.5,  
-    },
     '9089,9112': {
         'annular_bin': 6,
-        'neighborhood_cutout_size': 18.0,  
     },
     '9112,9099': {
         'annular_bin': 6,
@@ -83,23 +82,18 @@ parameters = {
     },
     '9095,9096': {
         'annular_bin': 7,                  # 9096 looks underexposed
-        'neighborhood_cutout_size': 15.0, 
     },
     '9099,9100': {
         'annular_bin': 7,                 
-        'neighborhood_cutout_size': 15.0, 
     },
     '9337,9338': {
         'annular_bin': 6,                  # focus
-        'neighborhood_cutout_size': 15.0, 
     },
     '9352,9353': {
         'annular_bin': 6,                  # focus
-        'neighborhood_cutout_size': 15.0, 
     },
     '9355,9356': {                         # 9356 partially blocked by shutter
         'annular_bin': 6,                  # focus
-        'neighborhood_cutout_size': 15.0, 
     },
     '9307,9311': {                         # guiding
         'elongation': 1.25,
@@ -120,17 +114,6 @@ parameters = {
     '8820,8847': {                         # guiding
         'elongation': 1.25,
         'elongation_limit': 1.15,
-        'neighborhood_cutout_size': 30.0, 
-    },
-    '8840,8845': {
-        'neighborhood_cutout_size': 15.0,  
-    },
-    '9011,9043': {
-        'neighborhood_cutout_size': 15.0,  
-        'display_cutout_size': 2.0,
-    },
-    '9381,9388': {
-        'neighborhood_cutout_size': 20.0,  
     },
 }
 
@@ -173,7 +156,7 @@ sequences = {
     'seq26': [9285, 9286],
     'seq27': [9337, 9338],
     'seq28': [9352, 9353],
-    'seq29': [9355, 9356],
+    'seq29': [9355, 9356],      # 2nd plate partially obstructed by shutter
 #     'seq30': [9469, 9472],    # comet Arend-Roland   Ha + GG5
 #     'seq31': [9482, 9484],    # comet Arend-Roland   Kodak OaO
 #     'seq32': [9488, 9489, 9490, 9491],     # comet Arend-Roland   Kodak OaO

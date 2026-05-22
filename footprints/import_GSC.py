@@ -11,6 +11,7 @@ parameters = {
         'nproc': 8,                                # number of performance processors (Mac M1 16Gb) - average tasks
         'nproc_analysis': 4,                       # number of performance processors (Mac M1 16Gb) - heavy tasks
         # sextractor and catalog criteria
+        'find_mismatches': True,                  # run find_mismatches?
         'use_catalog': True,                      # use Gaia IDs for filtering
         'sextractor_flags': 4,
         'model_prediction': 0.6,
@@ -32,9 +33,14 @@ parameters = {
         'profile_diff_threshold': 0.05,           # 0.04 good, checked with false positives
         'circularity_threshold': [70],            # about 28% on a 0-255 scale
         'circularity_low_limit': 0.80, 
+        'shape_defect_limit': 0.10,
+        'circle_deviation_limit': 0.10,
+        'shape_defect_limit_small_area': 0.50,
+        'circle_deviation_limit_small_area': 0.50,
         'tiny_cutout_size': 21,                   # for cicularity computation (px)
         'false_positive_threshold': 10.,          # checked with false positives
         # display
+        'display_active': True,
         'fwhm_lim': 20., 
         'disp_elong_lim': 1.2,
         'display_cutout_size': 3.0,                # full side of square, arcmin

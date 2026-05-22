@@ -26,10 +26,25 @@ tel_suffix = "DR"
 
 telescope_names = {
     'GS':  'Grosser Schmidt-Spiegel',       # 0.91 arcsec/px
-    'GSC': 'Great Schmidt Camera',          # 1.29
-    'ST':  '1m-Spiegelteleskop',
-    'DR':  'Doppel-Reflektor',              # 0.73
+    'GSC': 'Great Schmidt Camera',          # 1.29 arcsec/px
+    'ST':  '1m-Spiegelteleskop',            # 0.73 arcsec/px
+    'DR':  'Doppel-Reflektor',              # 0.73 arcsec/px
 }
+
+
+# some data sets have plates that are indistinguishable from each other
+# except for their 'emulsion' property. In this case, we need to run
+# specific code that is triggered by the 'use_emulsion' flag.
+use_emulsion = {
+    'Doppel-Reflektor': False,
+    '1m-Spiegelteleskop': False,
+    'Grosser Schmidt-Spiegel': False,
+    'Grosser Refractor': False,
+    'Great Schmidt Camera': True,
+}
+
+
+# scanner resolution is 10.5833 micra/px for all telescopes
 
 DATAPATH = '/Users/busko/Projects/VASCO_data/footprints'
 # DATAPATH = '/Volumes/backup/plateanalysis_data/footprints'

@@ -167,6 +167,23 @@ def exceeds_criteria(table, row_index, par):
     if table['circularity'][row_index] < par['circularity_low_limit']:
         return True
     
+    # some criteria from OpenCV are unreliable below area ~ 100
+    if table['area'][row_index] > 90.:
+        
+        if table['shape_defect'][row_index] > par['shape_defect_limit']:
+            return True
+
+        if table['circle_deviation'][row_index] > par['circle_deviation_limit']:
+            return True
+    # but can be used to weed out outrageous shapes
+    else:
+        if table['shape_defect'][row_index] > par['shape_defect_limit_small_area']:
+            return True
+
+        if table['circle_deviation'][row_index] > par['circle_deviation_limit_small_area']:
+            return True
+        
+    # from aperture photometry
     if is_false_positive(table, row_index, par):
         return True
 
@@ -289,8 +306,12 @@ def make_sky_coords(table, wcs):
     Converts x,y pixel positions in a table, to a SkyCoord
     object, using the provided WCS instance.
     '''
-    x_pos = list(table['x_source'])
-    y_pos = list(table['y_source'])
+    try:
+        x_pos = list(table['x_fit'])
+        y_pos = list(table['y_fit'])
+    except KeyError:
+        x_pos = list(table['x_source'])
+        y_pos = list(table['y_source'])
     
     world_coords = wcs.pixel_to_world(x_pos, y_pos)
     
@@ -344,6 +365,41 @@ def rotate_cutout(cutout, angle=90.):
     )
     
     return rotated_cutout_data, new_wcs
+
+
+def rotate_fits_90ccw(input_file, output_file, extension=0):
+    '''
+    Straight from Gemini AI
+    '''
+    # 1. Load the HDU and WCS
+    with fits.open(input_file) as hdul:
+        hdu = hdul[extension]
+        data = hdu.data
+        header = hdu.header
+        wcs = WCS(header)
+
+    # 2. Rotate the data 90 degrees CCW (k=1 is 90 deg CCW)
+    rotated_data = np.rot90(data, k=1)
+
+    # 3. Update WCS information
+    # Use the [Astropy WCS](https://astropy.org) 
+    # to create a new header from the rotated WCS.
+    # Note: Simple rotation swaps axes and flips one. 
+    new_wcs = wcs.swapaxes(0, 1) # Swap X and Y
+    # For CCW rotation, the new X axis is the old Y, 
+    # and the new Y is the negative of the old X.
+    
+    # Alternatively, use a simpler approach: update the existing header
+    # and let Astropy handle the pixel-to-world mapping.
+    new_header = new_wcs.to_header()
+    
+    # 4. Save to a new FITS file
+    new_hdu = fits.PrimaryHDU(data=rotated_data, header=new_header)
+    new_hdu.writeto(output_file, overwrite=True)
+
+# # Usage
+# rotate_fits_90ccw('original.fits', 'rotated_90ccw.fits')
+
 
 
 def get_pixel_coords(table, source_id, cutout, wcs_original):
@@ -715,7 +771,16 @@ def plot_radial_profiles(ax, table, source_id, cutout, wcs_original, edge_radii,
     
     for row in range(len(table)):
         sid = table['source_id'][row]
-        rp = make_radial_profile(table, sid, cutout, wcs_original, edge_radii)
+        
+        # the coords associated with source_id need to be transformed with the
+        # original image's WCS. The other coordinates are associated with the 
+        # cutout itself.
+        if sid == source_id:
+            wcs_t = wcs_original
+        else:
+            wcs_t = cutout.wcs
+
+        rp = make_radial_profile(table, sid, cutout, wcs_t, edge_radii)
         
         positions = rp.radius
         profile = rp.profile
@@ -765,11 +830,11 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     Parameters:
     
     table         - table with non-matched objects, with their PSFs already fitted
-    table_matched - table with matched objects, with no PSF fitted
+    table_matched - table with matched objects, with no PSF fitted - or None
     index         - index in non-matched table where the target object lives
     par           - parameter dict
-    flux_range    - range of peak flux where to accept stars for profile analysis
-    edge_radii    - radii used to build radial profiles
+    flux_range    - range of peak flux where to accept stars for profile analysis, or None
+    edge_radii    - radii used to build radial profiles, or None
     '''
     # pick up one row in the non-matched table; extract info
     plate_id = table['plate_id_1'][index]
@@ -781,6 +846,9 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     target_flux_max = table['flux_max'][index] 
     formatted_x_source = "{:.1f}".format(table['x_source'][index])
     formatted_y_source = "{:.1f}".format(table['y_source'][index])
+    formatted_target_flux_max = "{:.1f}".format(target_flux_max)
+    
+    print(source_id)
 
     # mid-exposure time, exptime, and WCS from image header
     header_1 = fits.getheader(fname(par['image1']))
@@ -810,7 +878,8 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     title = title + "EXPTIME: " + str(exptime_2) + " (s)   " 
     title = title + "Earth's shadow: " + formatted_es_1 + " deg." + "\n" 
     title = title + "Files: " + par['image1'] + "  " + par['image2'] 
-    title = title + "  Pixel coords: " + formatted_x_source + ", " + formatted_y_source 
+    title = title + "   Pixel coords: " + formatted_x_source + ", " + formatted_y_source
+    title = title + "   Peak: " + formatted_target_flux_max 
     
     # Cutout around target is small so we can see the target structure.
     # Neighborhood cutout picks up more stars for radial profile comparison
@@ -824,6 +893,12 @@ def plot_analysis_results(table, table_matched, index, par, flux_range, edge_rad
     plot_images(fname(par['image1']), fname(par['image2']), target_coords, target_cutout_size, title, 
                 invert_east=par['invert_east'], invert_north=par['invert_north'], rotate=par['rotate'],
                 marker_right='+')
+    
+    # done if no neighborhood table is supplied
+    if table_matched is None:
+        plt.show()
+        plt.close()
+        return
     
     # cutout for neighborhood needs to be explicitly handled here
     cutout_1, _no_need = get_cutouts(fname(par['image1']), fname(par['image2']), 
@@ -933,7 +1008,7 @@ def build_stats_text(table_object, table_stars):
                 mark = "*"
 
             value_object = table_object[stat_pars[key]['column']]
-            value_object_string = f"{value_object:5.2f}" + " " + mark
+            value_object_string = f"{value_object:6.3f}" + " " + mark
             
             text = text + name + " " + value_object_string + "\n"
     except KeyError:
